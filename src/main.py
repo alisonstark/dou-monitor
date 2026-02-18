@@ -13,6 +13,8 @@ from datetime import datetime, timedelta
 # On that page, each link corresponds to a match for the search query, 
 # and we can extract the relevant information from those links.
 
+
+
 def scrape_concursos(start_date, end_date):
     url = f"https://www.in.gov.br/consulta/-/buscar/dou?q=concurso&s=do3&exactDate=personalizado&sortType=0&publishFrom={start_date}&publishTo={end_date}"
     response = requests.get(url)
