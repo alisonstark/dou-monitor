@@ -96,5 +96,52 @@ def get_concurso_preview_lines(concurso, max_lines=10) -> list[str]:
     response.encoding = 'utf-8'
 
     page_text = BeautifulSoup(response.text, 'html.parser').get_text('\n')
-    lines = [line.strip() for line in page_text.split('\n') if line.strip()]
-    return lines[:max_lines]
+    raw_lines = [line.strip() for line in page_text.split('\n') if line.strip()]
+
+    # Filter out common navigation/boilerplate lines that appear on the DOU site
+    BOILERPLATE = [
+        'Você precisa habilitar o JavaScript',
+        'Ir para o conteúdo',
+        'Ir para o rodapé',
+        'Acesso rápido',
+        'Órgãos do Governo',
+        'Acesso à Informação',
+        'Legislação',
+        'Acessibilidade',
+        'Voltar',
+        'Compartilhe:',
+        'Publicador de Conteúdos e Mídias',
+        'Versão certificada',
+        'Diário Completo',
+        'Impressão',
+        'Imagem não disponível',
+        'Brasão do Brasil',
+        'Destaques do Diário Oficial da União',
+        'Base de Dados de Publicações do DOU',
+        'Verificação de autenticidade',
+        'Acesso GOV.BR',
+        'Mudar para o modo de alto contraste',
+        'Você precisa habilitar o JavaScript para o funcionamento correto.',
+    ]
+
+    def _is_boiler(line: str) -> bool:
+        ll = line.lower()
+        for phrase in BOILERPLATE:
+            if phrase.lower() in ll:
+                return True
+        # skip very short lines which are usually navigation labels
+        if len(ll) <= 2:
+            return True
+        return False
+
+    filtered = [l for l in raw_lines if not _is_boiler(l)]
+
+    # preserve order but remove exact duplicates
+    seen = set()
+    unique = []
+    for l in filtered:
+        if l not in seen:
+            seen.add(l)
+            unique.append(l)
+
+    return unique[:max_lines]

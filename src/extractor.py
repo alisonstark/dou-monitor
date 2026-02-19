@@ -82,19 +82,29 @@ def _parse_date(text: str) -> Optional[str]:
 
 
 def extract_basic_metadata(text: str) -> Dict[str, Any]:
-        BANCAS_CONHECIDAS = _load_whitelist()
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+
+    metadata: Dict[str, Any] = {
+        "orgao": None,
+        "edital_numero": None,
+        "cargo": None,
+        "banca": None,
+        "data_publicacao_dou": None,
+    }
+
+    # Try to infer 'orgao' from lines preceding an 'EDITAL' header
+    orgao_val = None
+    for i, ln in enumerate(lines[:40]):
         if re.search(r"EDITAL", ln, re.I):
-            # take up to 2 previous non-empty lines
-            prev_lines = []
-            if i - 2 >= 0:
-                prev_lines = lines[max(0, i - 2):i]
-            else:
-                prev_lines = lines[:i]
+            prev_lines = lines[max(0, i - 2) : i]
             orgao_val = " ".join(prev_lines).strip()
-            break
+            if orgao_val:
+                break
 
     if not orgao_val:
-        orgao_match = re.search(r"(?:Órgão|Entidade)[:\s\-\n]{1,30}([A-ZÀ-Ú0-9\w\s\-/\.,]+)", text, re.I)
+        orgao_match = re.search(
+            r"(?:Órgão|Entidade)[:\s\-\n]{1,30}([A-ZÀ-Ú0-9\w\s\-/\.,]+)", text, re.I
+        )
         if orgao_match:
             orgao_val = orgao_match.group(1).strip()
 
@@ -102,16 +112,22 @@ def extract_basic_metadata(text: str) -> Dict[str, Any]:
 
     # Try to capture edital number or date-based identifier
     edital_num = None
-    edital_match = re.search(r"Edital(?: de Abertura)?(?: n(?:º|o|r)\.?\s*)?[:\-\s]*([0-9A-Za-z\-/\.]+)", text, re.I)
+    edital_match = re.search(
+        r"Edital(?: de Abertura)?(?: n(?:º|o|r)\.?\s*)?[:\-\s]*([0-9A-Za-z\-/\.]+)",
+        text,
+        re.I,
+    )
     if edital_match:
         candidate = edital_match.group(1).strip()
-        # filter out short/likely non-numeric matches like just 'DE'
         if len(candidate) > 2 and not re.fullmatch(r"DE|DE\b", candidate, re.I):
             edital_num = candidate
 
     if not edital_num:
-        # look for 'Edital de Abertura de <date>' and use date as identifier
-        em = re.search(r"Edital de Abertura de\s*([0-9]{1,2}\s+de\s+\w+\s+de\s+[0-9]{4})", text, re.I)
+        em = re.search(
+            r"Edital de Abertura de\s*([0-9]{1,2}\s+de\s+\w+\s+de\s+[0-9]{4})",
+            text,
+            re.I,
+        )
         if em:
             edital_num = em.group(1).strip()
 
@@ -123,15 +139,15 @@ def extract_basic_metadata(text: str) -> Dict[str, Any]:
     if cargo_match:
         cargo_val = cargo_match.group(1).strip()
     else:
-        m = re.search(r"destinado a selecionar candidatos para o cargo de\s*([\w\s\-\.,/()]+)", text, re.I)
+        m = re.search(
+            r"destinado a selecionar candidatos para o cargo de\s*([\w\s\-\.,/()]+)", text, re.I
+        )
         if m:
             cargo_val = m.group(1).strip()
         else:
-            # fallback: try header after EDITAL line
             for i, ln in enumerate(lines[:20]):
                 if re.search(r"EDITAL", ln, re.I):
-                    # take next few lines as possible summary
-                    nxt = " ".join(lines[i:i+6])
+                    nxt = " ".join(lines[i : i + 6])
                     mm = re.search(r"PROVIMENTO DE\s+([A-Z\w\s\-/,()]+)", nxt, re.I)
                     if mm:
                         cargo_val = mm.group(1).strip()
@@ -162,32 +178,29 @@ def extract_basic_metadata(text: str) -> Dict[str, Any]:
 
         up = txt.upper()
 
-        # 1) direct match from known list
         for banca in BANCAS_CONHECIDAS:
             if banca in up:
                 return {"nome": banca, "tipo": "externa", "confianca_extracao": 0.98}
 
-        # 2) look for explicit labels like 'organizado por', 'executado por', 'banca organizadora'
-        label_re = re.search(r"(organizad[oa]r|executad[oa]r|realizad[oa]r|sob responsabilidade|contratada).{0,60}por\s+([A-ZÀ-Ú][\w\s\-\.,/()]+)", txt, re.I)
+        label_re = re.search(
+            r"(organizad[oa]r|executad[oa]r|realizad[oa]r|sob responsabilidade|contratada).{0,60}por\s+([A-ZÀ-Ú][\w\s\-\.,/()]+)",
+            txt,
+            re.I,
+        )
         if label_re:
             candidate = label_re.group(2).strip()
-            # short-circuit: if candidate contains words like 'universidade' or 'comissão', treat as execucao propria
             if re.search(r"UNIVERSIDADE|UNIVERSITÁRIO|COMISSÃO|PRÓ-?REITOR|PRÓ-REITOR|COMISSÃO EXAMINADORA|COMISSAO", candidate, re.I):
                 return {"nome": candidate, "tipo": "execucao_propria", "confianca_extracao": 0.8}
-            # if candidate contains 'fundação' or 'instituto' treat as fundacao/instituto
             if re.search(r"FUNDAÇÃO|FUNDACAO|INSTITUTO|FUNDAÇÃO|FUNDAO", candidate, re.I):
                 return {"nome": candidate, "tipo": "fundacao", "confianca_extracao": 0.9}
             return {"nome": candidate, "tipo": "externa", "confianca_extracao": 0.6}
 
-        # 3) search for words 'Fundação' or 'Instituto' anywhere as a fallback
         m = re.search(r"(FUNDAÇÃO|FUNDACAO|INSTITUTO)\s+[A-ZÀ-Ú0-9\w\s\-]+", up)
         if m:
             candidate = m.group(0).strip().title()
             return {"nome": candidate, "tipo": "fundacao", "confianca_extracao": 0.75}
 
-        # 4) negative heuristic: look for 'Comissão Examinadora' or phrasing indicating internal execution
         if re.search(r"COMISSÃO EXAMINADORA|COMISSAO EXAMINADORA|COMISSÃO DESIGNADA|COMISSAO DESIGNADA|EXECUTADO PELA PRÓ-?REITORIA|EXECUTADO PELA PROGP", txt, re.I):
-            # attempt to find the institution name nearby
             inst = None
             for ln in lines[:10]:
                 if re.search(r"UNIVERSIDADE|FUNDAÇÃO|INSTITUTO|MINISTÉRIO|MINISTERIO", ln, re.I):
@@ -195,12 +208,10 @@ def extract_basic_metadata(text: str) -> Dict[str, Any]:
                     break
             return {"nome": inst or "Instituição organizadora", "tipo": "execucao_propria", "confianca_extracao": 0.85}
 
-        # default: no clear banca found
         return {"nome": None, "tipo": None, "confianca_extracao": 0.0}
 
     metadata["banca"] = extract_banca_struct(text)
 
-    # publication date in DOU sometimes appears as 'Publicado em: dd de mês de yyyy' or simple date
     pub_match = re.search(r"Publicado(?: em)?[:\s\-]{0,10}([0-9]{1,2}\s+de\s+\w+\s+de\s+[0-9]{4})", text, re.I)
     if pub_match:
         metadata["data_publicacao_dou"] = _parse_date(pub_match.group(1))

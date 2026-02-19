@@ -1,10 +1,10 @@
 import argparse
 from datetime import datetime, timedelta
 
-from pdf_export import save_concurso_pdf
 from scraper import get_concurso_preview_lines, scrape_concursos
 from extractor import save_extraction_json
 import os
+import unicodedata
 
 
 def parse_args():
@@ -13,6 +13,13 @@ def parse_args():
         "--export-pdf",
         action="store_true",
         help="Save results as PDFs using Playwright",
+    )
+    parser.add_argument(
+        "--days",
+        "-d",
+        type=int,
+        default=7,
+        help="Number of days to look back (default: 7)",
     )
     return parser.parse_args()
 
@@ -24,11 +31,18 @@ def process_abertura_concursos(abertura_concursos, export_pdf):
 
     for concurso in abertura_concursos:
         processed += 1
+        # Always show the title; in preview mode we only display the title
         print(f"Title:   {concurso['title']}")
-        print(f"Date:    {concurso['date']} (Edition {concurso['edition']})")
-        print(f"Section: {concurso['section']}")
-        print(f"URL:     {concurso['url']}")
         if export_pdf:
+            try:
+                # Import lazily so preview mode doesn't require Playwright to be installed
+                from pdf_export import save_concurso_pdf
+            except Exception as e:
+                errors += 1
+                print(f"Error importing Playwright/pdf_export: {e}")
+                print("PDF export unavailable; install Playwright or run without --export-pdf.")
+                continue
+
             try:
                 save_concurso_pdf(concurso)
                 # after saving the PDF, attempt extraction to JSON
@@ -42,21 +56,9 @@ def process_abertura_concursos(abertura_concursos, export_pdf):
                 errors += 1
                 print(f"Error accessing URL: {e}")
         else:
-            if not preview_header_printed:
-                print(80*"-")
-                print("[!] \033[31mPREVIEW MODE\033[0m: use --export-pdf to save results as PDFs.")
-                print(80*"-" + "\n")
-                preview_header_printed = True
-            try:
-                preview_lines = get_concurso_preview_lines(concurso, max_lines=10)
-                if preview_lines:
-                    for line in preview_lines:
-                        print(line)
-                else:
-                    print("No preview content found.")
-            except Exception as e:
-                errors += 1
-                print(f"Error accessing URL: {e}")
+            # preview mode: keep output minimal (only title)
+            # increment processed count already done; nothing else to fetch here.
+            pass
         print(f"{'-'*80}\n")
 
     return {
@@ -69,21 +71,26 @@ if __name__ == "__main__":
 
     args = parse_args()
 
-    # Make it so that the end_date is today's date, and the start_date is 7 days before today's date.
-    
+    # Make end_date today's date, and start_date `args.days` before today's date.
     end_date = datetime.today().strftime('%d-%m-%Y')
-    start_date = (datetime.today() - timedelta(days=7)).strftime('%d-%m-%Y')
+    start_date = (datetime.today() - timedelta(days=args.days)).strftime('%d-%m-%Y')
 
     concursos = scrape_concursos(start_date, end_date)
 
     # From the list of public tenders and competitions found, obtain the ones that contain keywords like "abertura"
     # that indicate the opening of a public tender or competition, and print their titles, dates, and URLs.
     abertura_concursos = []
-    keywords = ["abertura", "início", "iniciado"]
-    
+    # use unaccented keyword matching to be robust to diacritics
+    keywords = ["abertura", "inicio", "iniciado"]
+
+    def _normalize(text: str) -> str:
+        return "".join(
+            c for c in unicodedata.normalize("NFKD", text) if not unicodedata.combining(c)
+        ).lower()
+
     for concurso in concursos:
-        title_lower = concurso['title'].lower()
-        if any(keyword in title_lower for keyword in keywords):
+        title_norm = _normalize(concurso.get('title', ''))
+        if any(keyword in title_norm for keyword in keywords):
             abertura_concursos.append(concurso)
     
     print(f"\n{'='*80}")
