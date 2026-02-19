@@ -58,6 +58,68 @@ Text-based PDFs looked poor because they did not capture the page's print stylin
 - Replaced manual PDF generation with Playwright-based printing to match the site's print output.
 - Ensured the PDF output uses print media styling and page sizing.
 - Reused a single browser context with realistic user agent, locale, and timezone to avoid 403 responses.
+````markdown
+# Changes Summary
+
+**Date:** February 18, 2026
+
+## Problems Encountered
+
+### Problem 1: Connection Error
+The application was encountering a `requests.exceptions.ConnectionError` with the error message:
+```
+Remote end closed connection without response
+```
+
+**Root Cause:** The remote server was closing the connection unexpectedly due to bot detection (default `requests` library User-Agent identifies automated requests).
+
+### Problem 2: No Search Results Found
+After fixing the connection issue, the scraper was finding 0 results because it was looking for HTML `<a>` tags with the pattern `/web/dou/-/`, but the search results are not rendered as HTML links.
+
+**Root Cause:** The DOU search page loads results dynamically using JavaScript. The search results are embedded as JSON data in a `<script>` tag, not as traditional HTML links in the initial page load.
+
+### Problem 3: PDF Output Quality
+Text-based PDFs looked poor because they did not capture the page's print styling.
+
+**Root Cause:** Manual PDF generation ignored the page's print layout and dynamic styling.
+
+# Changes Summary
+
+**Date:** February 18, 2026
+
+## Problems Encountered
+
+### Problem 1: Connection Error
+The application was encountering a `requests.exceptions.ConnectionError` with the error message:
+
+```
+Remote end closed connection without response
+```
+
+**Root Cause:** The remote server was closing the connection unexpectedly due to bot detection (default `requests` library User-Agent identifies automated requests).
+
+### Problem 2: No Search Results Found
+After fixing the connection issue, the scraper was finding 0 results because it was looking for HTML `<a>` tags with the pattern `/web/dou/-/`, but the search results are not rendered as HTML links.
+
+**Root Cause:** The DOU search page loads results dynamically using JavaScript. The search results are embedded as JSON data in a `<script>` tag, not as traditional HTML links in the initial page load.
+
+### Problem 3: PDF Output Quality
+Text-based PDFs looked poor because they did not capture the page's print styling.
+
+**Root Cause:** Manual PDF generation ignored the page's print layout and dynamic styling.
+
+## Changes Made
+
+### 1. HTTP Reliability and Parsing Fixes
+- Added realistic browser headers to bypass bot detection.
+- Added retry logic with progressive backoff and request timeouts.
+- Switched scraping from HTML link parsing to embedded JSON parsing.
+- Extracted structured fields (title, date, edition, section, URL) from results.
+
+### 2. Print-Quality PDFs
+- Replaced manual PDF generation with Playwright-based printing to match the site's print output.
+- Ensured the PDF output uses print media styling and page sizing.
+- Reused a single browser context with realistic user agent, locale, and timezone to avoid 403 responses.
 
 ### 3. Separation of Responsibilities
 - Moved scraping logic into `src/scraper.py`.
@@ -122,4 +184,27 @@ The tool now:
 ### Next recommended actions
 
 - Run `apply_review.py --apply` after completing CSV edits to produce reviewed examples; then run `update_whitelist.py --threshold N --apply` to add frequent corrections to the extractor's whitelist. This process is not automatic and requires running both steps deliberately to avoid introducing noise.
+
+---
+
+## Date: February 19, 2026 (hotfixes & UX improvements)
+
+### Quick fixes and CLI improvements
+
+- **Added `requirements.txt`** with `playwright`, `pdfplumber`, and `dateparser` to simplify environment setup.
+- **Fixed IndentationError** in `src/extractor.py` that caused the script to fail during import.
+- **Added `--days` / `-d` CLI flag** to `src/main.py` to control the lookback window (default 7 days).
+- **Lazy-import Playwright export**: `pdf_export` is now imported only when `--export-pdf` is used so preview mode runs without Playwright installed.
+
+### Detection & preview improvements
+
+- **Accent-insensitive keyword matching**: title matching now normalizes diacritics before searching for keywords like `abertura`/`inicio`/`iniciado`.
+- **Preview boilerplate filter**: common site navigation strings are removed from preview output to avoid noisy lines.
+- **Preview mode minimal output**: preview now prints only the title for matched notices (keeps console output concise).
+
+### Notes
+
+- These changes are incremental and focused on developer UX and robustness. If you want the scanner to be more aggressive, we can add a `--scan-body` option to search page content for keywords (slower but more reliable).
+
+````
 

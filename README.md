@@ -12,9 +12,20 @@ Monitor DOU (Diario Oficial da Uniao) publications for concurso-related results,
 - PDF export reuses a browser context with realistic locale and timezone
 
 ## How to Run
-- Install dependencies and Playwright browsers
+- Install dependencies and Playwright browsers (see below)
 - Run the main script from the project root
-- Use the export flag to save PDFs, or omit it for preview mode
+- Use the `--export-pdf` flag to save PDFs, or omit it for preview (title-only) mode
+
+CLI highlights
+- `--export-pdf`: save print-quality PDFs (requires Playwright and browsers)
+- `--days` / `-d`: change lookback window in days (default: 7)
+
+Example
+```bash
+python src/main.py            # preview (shows titles only)
+python src/main.py -d 14      # preview last 14 days
+python src/main.py -d 30 --export-pdf  # export PDFs for last 30 days
+```
 
 Additional tools and workflow
 - **Extraction (PDF → JSON):** After exporting PDFs the project can automatically extract structured summaries. The extractor saves summaries to `data/summaries/`.
@@ -48,17 +59,19 @@ Files and folders
 Dependencies (recommended)
 - `pdfplumber` — PDF text and table extraction
 - `dateparser` — normalize dates in Portuguese
-- Playwright + browsers — PDF export
+- `playwright` — PDF export (Python package) and browser engines
 
-
+Install
 ```bash
-.venv/bin/pip install pdfplumber dateparser
-# and install playwright browsers if you use PDF export
-.venv/bin/python -m playwright install
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+# install Playwright browser engines
+python -m playwright install
+```
 
 Developer debugging guide
 - A step-by-step walkthrough is available at `docs/debugger_walkthrough.md` (ignored by Git by default). It explains the pipeline flow, main functions to inspect, and quick interactive checks for common problems.
-```
 
 ## Output
 - Console summary with counts and result metadata
