@@ -1,36 +1,64 @@
-import requests
-from bs4 import BeautifulSoup
+import argparse
 from datetime import datetime, timedelta
 
-# The URL of the website to scrape follows a pattern:
-# https://www.in.gov.br/consulta/-/buscar/dou?q=concurso&s=do3&exactDate=personalizado&sortType=0&publishFrom=14-02-2026&publishTo=18-02-2026
-# What changes is the date range in the URL, which is defined by the 'publishFrom' and 'publishTo' parameters.
-# The "concurso" parameter is the search query, which can be changed to other keywords related to public tenders and competitions.
-# Also, do3 is the code for the Diário Oficial da União (DOU), which is the official journal of the Brazilian government,
-# which can be changed to other codes for different official journals (1,2,3).
-# We're particularly interested in the DO3, which is the Diário Oficial da União (DOU), 
-# as it contains the most relevant information about public tenders and competitions.
-# On that page, each link corresponds to a match for the search query, 
-# and we can extract the relevant information from those links.
+from pdf_export import save_concurso_pdf
+from scraper import get_concurso_preview_lines, scrape_concursos
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Monitor DOU concursos")
+    parser.add_argument(
+        "--export-pdf",
+        action="store_true",
+        help="Save results as PDFs using Playwright",
+    )
+    return parser.parse_args()
 
-def scrape_concursos(start_date, end_date):
-    url = f"https://www.in.gov.br/consulta/-/buscar/dou?q=concurso&s=do3&exactDate=personalizado&sortType=0&publishFrom={start_date}&publishTo={end_date}"
-    response = requests.get(url)
-    soup = BeautifulSoup(response.text, 'html.parser')
 
-    # Find all links that match the search query
-    links = soup.find_all('a', href=True)
+def process_abertura_concursos(abertura_concursos, export_pdf):
+    preview_header_printed = False
+    errors = 0
+    processed = 0
 
-    concursos = []
-    for link in links:
-        if 'concurso' in link.text.lower():
-            concursos.append(link['href'])
+    for concurso in abertura_concursos:
+        processed += 1
+        print(f"Title:   {concurso['title']}")
+        print(f"Date:    {concurso['date']} (Edition {concurso['edition']})")
+        print(f"Section: {concurso['section']}")
+        print(f"URL:     {concurso['url']}")
+        if export_pdf:
+            try:
+                save_concurso_pdf(concurso)
+            except Exception as e:
+                errors += 1
+                print(f"Error accessing URL: {e}")
+        else:
+            if not preview_header_printed:
+                print(80*"-")
+                print("[!] \033[31mPREVIEW MODE\033[0m: use --export-pdf to save results as PDFs.")
+                print(80*"-" + "\n")
+                preview_header_printed = True
+            try:
+                preview_lines = get_concurso_preview_lines(concurso, max_lines=10)
+                if preview_lines:
+                    for line in preview_lines:
+                        print(line)
+                else:
+                    print("No preview content found.")
+            except Exception as e:
+                errors += 1
+                print(f"Error accessing URL: {e}")
+        print(f"{'-'*80}\n")
 
-    return concursos
+    return {
+        "processed": processed,
+        "errors": errors,
+        "preview_mode": not export_pdf,
+    }
 
 if __name__ == "__main__":
+
+    args = parse_args()
 
     # Make it so that the end_date is today's date, and the start_date is 7 days before today's date.
     
@@ -38,5 +66,28 @@ if __name__ == "__main__":
     start_date = (datetime.today() - timedelta(days=7)).strftime('%d-%m-%Y')
 
     concursos = scrape_concursos(start_date, end_date)
+
+    # From the list of public tenders and competitions found, obtain the ones that contain keywords like "abertura"
+    # that indicate the opening of a public tender or competition, and print their titles, dates, and URLs.
+    abertura_concursos = []
+    keywords = ["abertura", "início", "iniciado"]
+    
     for concurso in concursos:
-        print(concurso)
+        title_lower = concurso['title'].lower()
+        if any(keyword in title_lower for keyword in keywords):
+            abertura_concursos.append(concurso)
+    
+    print(f"\n{'='*80}")
+    print(f"Total concursos found: {len(concursos)}")
+    print(f"Total abertura concursos: {len(abertura_concursos)}")
+    print(f"{'='*80}\n")
+    
+    # If the abertura_concursos list is not empty, access the URL of each concurso in the abertura_concursos list 
+    # and print the first 500 characters of the page content to verify that the page is accessible and contains relevant information about the concurso.
+
+    if abertura_concursos:
+        result = process_abertura_concursos(abertura_concursos, args.export_pdf)
+        if result["errors"]:
+            print(f"Completed with {result['errors']} error(s).")
+    else:
+        print("No abertura concursos found in the specified date range.")
