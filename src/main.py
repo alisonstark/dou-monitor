@@ -1,7 +1,7 @@
 import argparse
 from datetime import datetime, timedelta
 
-from scraper import get_concurso_preview_lines, scrape_concursos
+from scraper import scrape_concursos
 from extractor import save_extraction_json
 import os
 import unicodedata
@@ -44,14 +44,20 @@ def process_abertura_concursos(abertura_concursos, export_pdf):
                 continue
 
             try:
-                save_concurso_pdf(concurso)
-                # after saving the PDF, attempt extraction to JSON
-                try:
-                    pdf_path = os.path.join("editais", f"{concurso['url_title']}.pdf")
-                    out_json = save_extraction_json(pdf_path)
-                    print(f"Extraction saved to {out_json}")
-                except Exception as ex:
-                    print(f"Warning: extraction failed: {ex}")
+                result = save_concurso_pdf(concurso)
+                # Check if the result is an error message
+                if isinstance(result, str) and result.startswith("Error"):
+                    errors += 1
+                    print(result)
+                else:
+                    print(result)
+                    # after saving the PDF, attempt extraction to JSON
+                    try:
+                        pdf_path = os.path.join("editais", f"{concurso['url_title']}.pdf")
+                        out_json = save_extraction_json(pdf_path)
+                        print(f"Extraction saved to {out_json}")
+                    except Exception as ex:
+                        print(f"Warning: extraction failed: {ex}")
             except Exception as e:
                 errors += 1
                 print(f"Error accessing URL: {e}")
@@ -94,8 +100,18 @@ if __name__ == "__main__":
             abertura_concursos.append(concurso)
     
     print(f"\n{'='*80}")
+    print(f"SCRAPING RESULTS: {start_date} to {end_date}")
+    print(f"{'='*80}")
     print(f"Total concursos found: {len(concursos)}")
-    print(f"Total abertura concursos: {len(abertura_concursos)}")
+    
+    if concursos:
+        print(f"\nAll concursos:")
+        for i, c in enumerate(concursos, 1):
+            title = c.get('title', 'N/A')[:100]  # Truncate long titles
+            print(f"  {i}. {title}")
+    
+    print(f"\n{'='*80}")
+    print(f"Total abertura concursos (keywords: {', '.join(keywords)}): {len(abertura_concursos)}")
     print(f"{'='*80}\n")
     
     # If the abertura_concursos list is not empty, access the URL of each concurso in the abertura_concursos list 

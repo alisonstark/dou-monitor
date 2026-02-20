@@ -4,50 +4,120 @@
 Monitor DOU (Diario Oficial da Uniao) publications for concurso-related results, with fast preview and optional PDF export.
 
 ## Capabilities
-- Scrapes DOU search results using the site embedded JSON data
+- Scrapes DOU search results using embedded JSON data
 - Handles connection retries and timeouts
-- Filters results by keywords (abertura, inicio, iniciado)
-- Preview mode prints the first 10 lines per result
-- PDF export uses the site print layout for high fidelity output
-- PDF export reuses a browser context with realistic locale and timezone
+- Filters results by keywords (abertura, inicio, iniciado) with case-insensitive matching
+- Preview mode prints concurso titles with organized output
+- PDF export uses site print layout for high-fidelity output
+- **Automatic PDF → JSON extraction** with structured field parsing:
+  - Metadata (órgão, edital número, cargo, banca)
+  - Vagas (total, PCD, PPIQ)
+  - Financeiro (taxa, remuneração)
+  - **Cronograma (inscrição, isenção, data prova)** - production-grade semantic extraction
+- **Human-in-the-loop review workflow** with CSV generation and correction application
+- **Self-improving extraction system:**
+  - Manual corrections automatically update whitelists
+  - Future extractions benefit from past corrections
+  - Progressively reduces need for manual intervention
+- Fully case-insensitive whitelist matching
+- Section-based optimization for faster cronograma extraction
 
 ## How to Run
-- Install dependencies and Playwright browsers (see below)
-- Run the main script from the project root
-- Use the `--export-pdf` flag to save PDFs, or omit it for preview (title-only) mode
 
-CLI highlights
-- `--export-pdf`: save print-quality PDFs (requires Playwright and browsers)
-- `--days` / `-d`: change lookback window in days (default: 7)
+**Prerequisites:** Install dependencies and Playwright browsers (see Installation section below)
 
-Example
+Run the main script from the project root:
+
 ```bash
-python src/main.py            # preview (shows titles only)
+python src/main.py            # preview mode (shows all concursos found + abertura matches)
 python src/main.py -d 14      # preview last 14 days
-python src/main.py -d 30 --export-pdf  # export PDFs for last 30 days
+python src/main.py -d 30 --export-pdf  # export PDFs and extract JSON for last 30 days
 ```
+
+### CLI Options
+- `--export-pdf`: Save print-quality PDFs and extract JSON summaries (requires Playwright)
+- `--days` / `-d`: Lookback window in days (default: 7)
+
+### Output
+The scraper displays:
+- Date range being searched
+- **All concursos found** (numbered list with titles)
+- Abertura concursos matching keywords (abertura, inicio, iniciado)
+- Processing results for each edital
 
 Additional tools and workflow
-- **Extraction (PDF → JSON):** After exporting PDFs the project can automatically extract structured summaries. The extractor saves summaries to `data/summaries/`.
 
-- **Review CSV (human-in-the-loop):** Generate a CSV for manual review with:
+### Extraction Pipeline (PDF → JSON)
+
+After exporting PDFs, the project automatically extracts structured summaries. The extractor saves summaries to `data/summaries/`.
+
+**Extraction includes:**
+- Metadata: órgão, edital número, cargo, banca
+- Vagas: total, PCD, PPQ/PPIQ
+- Financeiro: taxa de inscrição, remuneração
+- **Cronograma: inscrição início/fim, isenção início, data da prova**
+
+The cronograma parser uses semantic date extraction with text normalization to handle various PDF formats and table layouts. It works in two stages:
+1. Tries to find and extract from the CRONOGRAMA section (faster, more precise)
+2. Falls back to full PDF scan if section detection fails (more robust)
+
+### Review Workflow (Human-in-the-Loop Learning)
+
+**1. Generate review CSV:**
 
 ```bash
-.venv/bin/python src/review_cli.py --summaries-dir data/summaries
+python src/review_cli.py --summaries-dir data/summaries
 ```
 
-This writes `data/review_<timestamp>.csv` listing each summary, a confidence score and flagged issues.
+This writes `data/review_<timestamp>.csv` listing each summary with confidence scores and flagged issues.
 
-- **Apply reviewed CSV:** After editing the CSV, apply corrections back to JSON summaries (dry-run by default):
+**2. Apply reviewed corrections:**
+
+After editing the CSV, apply corrections back to JSON summaries (dry-run by default):
 
 ```bash
-.venv/bin/python src/apply_review.py --csv data/review_YYYYMMDDTHHMMSSZ.csv
+python src/apply_review.py --csv data/review_YYYYMMDDTHHMMSSZ.csv
 ```
 
-To actually write changes and create backups use `--apply` and set a reviewer name:
+To actually write changes and create backups, use `--apply` and set a reviewer name:
 
 ```bash
-.venv/bin/python src/apply_review.py --csv data/review_YYYYMMDDTHHMMSSZ.csv --apply --reviewer "SeuNome"
+python src/apply_review.py --csv data/review_YYYYMMDDTHHMMSSZ.csv --apply --reviewer "YourName"
+```
+
+This creates:
+- Updated JSON files in `data/summaries/`
+- Backups in `data/backups/`
+- **Reviewed examples in `data/reviewed_examples/`** (for training the whitelist)
+
+**3. Update whitelists (Learning Loop):**
+
+After applying corrections, update the extraction whitelists to improve future runs:
+
+```bash
+python src/update_whitelist.py --threshold 1 --apply
+```
+
+This:
+- Analyzes all reviewed examples in `data/reviewed_examples/`
+- Finds cargo/banca values appearing ≥ threshold times
+- Adds them to `data/cargos_whitelist.json` and `data/bancas_whitelist.json`
+
+**How the whitelist improves extraction:**
+
+**Stage 1 - Validation/Normalization:**
+- If cargo/banca extracted via regex → validates against whitelist → normalizes to canonical form
+
+**Stage 2 - Fallback Extraction:**
+- If NO cargo/banca found by primary patterns → searches PDF for whitelisted items
+- **This means corrections today improve extraction tomorrow automatically**
+
+The system is **self-improving**: manual corrections progressively reduce the need for future manual intervention. Whitelist matching is fully case-insensitive and works with any variation ("PROFESSOR", "Professor", "professor").
+
+**Preview proposed additions without applying:**
+
+```bash
+python src/update_whitelist.py --threshold 1
 ```
 
 Files and folders
@@ -55,6 +125,9 @@ Files and folders
 - `data/summaries/` — JSON summaries extracted from each PDF
 - `data/review_*.csv` — generated CSVs for manual review
 - `data/backups/` — backups created when applying CSV corrections
+- `data/reviewed_examples/` — training data from applied corrections (feeds whitelist learning)
+- `data/cargos_whitelist.json` — cargo variations for fallback extraction (auto-updated)
+- `data/bancas_whitelist.json` — banca organizations for fallback extraction (auto-updated)
 
 Dependencies (recommended)
 - `pdfplumber` — PDF text and table extraction
@@ -73,6 +146,31 @@ python -m playwright install
 Developer debugging guide
 - A step-by-step walkthrough is available at `docs/debugger_walkthrough.md` (ignored by Git by default). It explains the pipeline flow, main functions to inspect, and quick interactive checks for common problems.
 
-## Output
-- Console summary with counts and result metadata
-- Optional PDFs saved under the editais folder
+---
+
+## Quick Start Summary
+
+1. **Scrape and extract:**
+   ```bash
+   python src/main.py -d 30 --export-pdf
+   ```
+
+2. **Review extractions:**
+   ```bash
+   python src/review_cli.py --summaries-dir data/summaries
+   # Edit the generated CSV file
+   ```
+
+3. **Apply corrections:**
+   ```bash
+   python src/apply_review.py --csv data/review_*.csv --apply --reviewer "YourName"
+   ```
+
+4. **Update whitelists:**
+   ```bash
+   python src/update_whitelist.py --threshold 1 --apply
+   ```
+
+5. **Next scrape:** Corrections from step 3-4 automatically improve extraction!
+
+---

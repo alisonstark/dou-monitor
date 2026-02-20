@@ -39,8 +39,11 @@ def compute_confidence(item: Dict[str, Any]) -> (float, List[str]):
     else:
         issues.append("missing_taxa")
 
-    if cron.get("data_prova"):
+    # Check for any critical cronograma date (more flexible than just data_prova)
+    if any(cron.get(k) for k in ["inscricao_inicio", "data_prova", "resultado_isencao"]):
         score += 0.15
+    else:
+        issues.append("missing_key_dates")
 
     # content sanity checks
     banca = md.get("banca")
@@ -70,6 +73,41 @@ def compute_confidence(item: Dict[str, Any]) -> (float, List[str]):
     return round(score, 2), issues
 
 
+def _format_date_range(start: str, end: str) -> str:
+    """Format a date range as 'DD/MM a DD/MM' for readability."""
+    if not start and not end:
+        return ""
+    if start and end and start != end:
+        # Extract day/month from ISO dates (YYYY-MM-DD)
+        start_dm = start[5:] if start else ""
+        end_dm = end[5:] if end else ""
+        return f"{start_dm} a {end_dm}"
+    elif start:
+        return start[5:]  # Just DD/MM
+    else:
+        return end[5:] if end else ""
+
+
+def _summarize_cronograma(cron: Dict) -> str:
+    """Create a human-readable summary of essential dates."""
+    parts = []
+    
+    # Inscrição (período)
+    inscr = _format_date_range(cron.get("inscricao_inicio"), cron.get("inscricao_fim"))
+    if inscr:
+        parts.append(f"Insc: {inscr}")
+    
+    # Isenção (data de início/solicitação)
+    if cron.get("isencao_inicio"):
+        parts.append(f"Isen: {cron['isencao_inicio'][5:]}")
+    
+    # Prova
+    if cron.get("data_prova"):
+        parts.append(f"Prova: {cron['data_prova'][5:]}")
+    
+    return " | ".join(parts) if parts else ""
+
+
 def generate_csv(out_path: Path, summaries_dir: Path):
     summaries = sorted(summaries_dir.glob("*.json"))
     rows = []
@@ -86,6 +124,14 @@ def generate_csv(out_path: Path, summaries_dir: Path):
         fin = data.get("financeiro", {})
         cron = data.get("cronograma", {})
 
+        # Extract banca_nome from metadata
+        banca = md.get("banca")
+        banca_nome = None
+        if isinstance(banca, dict):
+            banca_nome = banca.get("nome")
+        else:
+            banca_nome = banca
+
         rows.append({
             "file": p.name,
             "orgao": md.get("orgao", ""),
@@ -96,7 +142,7 @@ def generate_csv(out_path: Path, summaries_dir: Path):
             "vagas_pcd": vagas.get("pcd", ""),
             "vagas_ppiq": vagas.get("ppiq", ""),
             "taxa_inscricao": fin.get("taxa_inscricao", ""),
-            "data_prova": cron.get("data_prova", ""),
+            "cronograma": _summarize_cronograma(cron),
             "confidence": conf,
             "issues": ";".join(issues),
         })
@@ -113,7 +159,7 @@ def generate_csv(out_path: Path, summaries_dir: Path):
         "vagas_pcd",
         "vagas_ppiq",
         "taxa_inscricao",
-        "data_prova",
+        "cronograma",
         "confidence",
         "issues",
     ]

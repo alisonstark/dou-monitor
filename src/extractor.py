@@ -14,39 +14,62 @@ try:
 except Exception:  # pragma: no cover - optional dependency
     dateparser = None
 
+# Try relative import first (when used as package), then absolute
+CronogramaParser = None
+try:
+    from .cronograma_parser import CronogramaParser
+except ImportError:
+    try:
+        from cronograma_parser import CronogramaParser
+    except ImportError:
+        # Fallback se cronograma_parser não estiver disponível
+        CronogramaParser = None
+
 logger = logging.getLogger(__name__)
 
 
-WHITELIST_PATH = Path("data/bancas_whitelist.json")
+BANCAS_WHITELIST_PATH = Path("data/bancas_whitelist.json")
+CARGOS_WHITELIST_PATH = Path("data/cargos_whitelist.json")
 
 
-def _load_whitelist() -> List[str]:
-    if WHITELIST_PATH.exists():
+def _load_whitelist(whitelist_path: Path) -> List[str]:
+    if whitelist_path.exists():
         try:
-            with WHITELIST_PATH.open(encoding="utf-8") as f:
+            with whitelist_path.open(encoding="utf-8") as f:
                 data = json.load(f)
             if isinstance(data, list):
                 return [str(x).upper() for x in data]
         except Exception:
             pass
-    # fallback default list
-    return [
-        "CEBRASPE",
-        "FGV",
-        "FUNDAÇÃO GETULIO VARGAS",
-        "VUNESP",
-        "IBFC",
-        "IDECAN",
-        "AOCP",
-        "QUADRIX",
-        "CONSULPLAN",
-        "FUNDATEC",
-        "IADES",
-        "FCC",
-        "FUNRIO",
-        "CESGRANRIO",
-        "CESPE",
-    ]
+    return []
+
+
+def _load_bancas_whitelist() -> List[str]:
+    whitelist = _load_whitelist(BANCAS_WHITELIST_PATH)
+    # fallback default list if no custom whitelist
+    if not whitelist:
+        return [
+            "CEBRASPE",
+            "FGV",
+            "FUNDAÇÃO GETULIO VARGAS",
+            "VUNESP",
+            "IBFC",
+            "IDECAN",
+            "AOCP",
+            "QUADRIX",
+            "CONSULPLAN",
+            "FUNDATEC",
+            "IADES",
+            "FCC",
+            "FUNRIO",
+            "CESGRANRIO",
+            "CESPE",
+        ]
+    return whitelist
+
+
+def _load_cargos_whitelist() -> List[str]:
+    return _load_whitelist(CARGOS_WHITELIST_PATH)
 
 
 def _extract_text_from_pdf(path: str) -> str:
@@ -153,10 +176,38 @@ def extract_basic_metadata(text: str) -> Dict[str, Any]:
                         cargo_val = mm.group(1).strip()
                     break
 
+    # Load cargo whitelist (used for both validation and fallback extraction)
+    cargos_whitelist = _load_cargos_whitelist()
+    
+    # Validate/normalize cargo against whitelist if extracted
+    if cargo_val and cargos_whitelist:
+        cargo_upper = cargo_val.upper()
+        # Check if extracted cargo matches any whitelisted cargo
+        for whitelisted_cargo in cargos_whitelist:
+            if whitelisted_cargo in cargo_upper or cargo_upper in whitelisted_cargo:
+                # Use the whitelisted version (to normalize variations)
+                cargo_val = whitelisted_cargo.title()
+                break
+    
+    # Fallback: If no cargo found, search for whitelisted cargos in text
+    if not cargo_val and cargos_whitelist:
+        text_upper = text.upper()
+        # Search for whitelisted cargos in the first 3000 chars
+        search_text = text_upper[:3000]
+        for whitelisted_cargo in cargos_whitelist:
+            if whitelisted_cargo.upper() in search_text:
+                # Found a whitelisted cargo in the text
+                cargo_val = whitelisted_cargo.title()
+                logger.debug(f"Cargo found via whitelist fallback: {cargo_val}")
+                break
+
     metadata["cargo"] = cargo_val
 
     # Banca: layered strategy (known list, keyword patterns, negative heuristics)
     def extract_banca_struct(txt: str) -> Dict[str, Any]:
+        # Load bancas from whitelist (dynamic) and merge with hardcoded list
+        bancas_whitelist = _load_bancas_whitelist()
+        
         BANCAS_CONHECIDAS = [
             "CEBRASPE",
             "FGV",
@@ -175,11 +226,14 @@ def extract_basic_metadata(text: str) -> Dict[str, Any]:
             "CESGRANRIO",
             "CESPE",
         ]
+        
+        # Merge whitelist with hardcoded list (deduplicate)
+        all_bancas = list(set(BANCAS_CONHECIDAS + bancas_whitelist))
 
         up = txt.upper()
 
-        for banca in BANCAS_CONHECIDAS:
-            if banca in up:
+        for banca in all_bancas:
+            if banca.upper() in up:
                 return {"nome": banca, "tipo": "externa", "confianca_extracao": 0.98}
 
         label_re = re.search(
@@ -219,77 +273,124 @@ def extract_basic_metadata(text: str) -> Dict[str, Any]:
     return metadata
 
 
-def extract_cronograma(text: str) -> Dict[str, Optional[str]]:
-    """Extract critical dates (inscrição, isenção, data da prova, homologação, recursos).
 
-    Returns a dict with ISO dates where found.
+
+
+def extract_cronograma(text: str, pdf_path: str = None) -> Dict[str, Optional[str]]:
+    """Extract 3 essential cronograma dates:
+    - inscricao_inicio, inscricao_fim (registration period)
+    - isencao_inicio (exemption request deadline)
+    - data_prova (exam date)
+    
+    Strategy:
+    1. ETAPA 1: Enhanced data-driven regex using CronogramaParser
+    2. ETAPA 2: Fallback to basic regex patterns
     """
     cronograma = {
         "inscricao_inicio": None,
         "inscricao_fim": None,
         "isencao_inicio": None,
-        "isencao_fim": None,
         "data_prova": None,
-        "resultado_isencao": None,
     }
-
-    # find date phrases near keywords
-    keywords = {
-        "inscricao": [r"inscrições?", r"inscricao"],
-        "isencao": [r"isen[cç][aã]o", r"isento"],
-        "prova": [r"data da prova", r"realiza.*prova|realizaç[aã]o da prova"],
-        "homologacao": [r"homologad", r"homologação"],
-    }
-
-    # generic date regex (several formats)
-    date_patterns = [r"[0-9]{1,2}/[0-9]{1,2}/[0-9]{4}", r"[0-9]{1,2}\s+de\s+[A-Za-zçÇãÃ]+\s+de\s+[0-9]{4}"]
-
-    for key, kws in keywords.items():
-        for kw in kws:
-            # search a window of characters around the keyword
-            for match in re.finditer(kw, text, re.I):
-                start = max(0, match.start() - 200)
-                end = min(len(text), match.end() + 200)
-                window = text[start:end]
-                # try to find any date in the window
-                for patt in date_patterns:
-                    dmatch = re.search(patt, window)
-                    if dmatch:
-                        iso = _parse_date(dmatch.group(0))
-                        if iso:
-                            if key == "inscricao":
-                                # decide if it's start or end by presence of '-' or 'a' or 'até'
-                                if re.search(r"(até|a|\-|até o|a partir de)", window, re.I):
-                                    # heuristics: if 'a' or 'até' before date, treat as end
-                                    # crude assignment: fill start then end
-                                    if cronograma["inscricao_inicio"] is None:
-                                        cronograma["inscricao_inicio"] = iso
-                                    elif cronograma["inscricao_fim"] is None:
-                                        cronograma["inscricao_fim"] = iso
-                                    else:
-                                        # no space
-                                        pass
-                                else:
-                                    if cronograma["inscricao_inicio"] is None:
-                                        cronograma["inscricao_inicio"] = iso
-                            elif key == "isencao":
-                                if cronograma["isencao_inicio"] is None:
-                                    cronograma["isencao_inicio"] = iso
-                                elif cronograma["isencao_fim"] is None:
-                                    cronograma["isencao_fim"] = iso
-                            elif key == "prova":
-                                cronograma["data_prova"] = iso
-                            else:
-                                cronograma.setdefault(key, iso)
-                        break
-                # stop after first useful match for this keyword occurrence
-                if any(cronograma.get(k) for k in cronograma):
-                    break
-            # if we've found some dates, stop looking for other synonyms
-            if any(cronograma.get(k) for k in cronograma):
+    
+    # ETAPA 1: Use CronogramaParser to extract from text
+    if CronogramaParser:
+        logger.debug("ETAPA 1: Using CronogramaParser for enhanced date extraction")
+        try:
+            parser = CronogramaParser()
+            result = parser.extract_from_text(text)
+            
+            logger.debug(f"CronogramaParser returned: {result}")
+            
+            if result:
+                # Copy only the 4 essential fields
+                for field in cronograma.keys():
+                    if result.get(field):
+                        cronograma[field] = result[field]
+                
+                populated = sum(1 for v in cronograma.values() if v)
+                logger.debug(f"ETAPA 1 result: {populated}/{len(cronograma)} fields populated")
+                logger.debug(f"Final cronograma: {cronograma}")
+                
+                if populated > 0:
+                    return cronograma
+        except Exception as e:
+            logger.debug(f"ETAPA 1 failed: {e}")
+            import traceback
+            logger.debug(traceback.format_exc())
+    
+    # ETAPA 2: Fallback to specific regex patterns
+    logger.debug("ETAPA 2: Fallback regex patterns")
+    
+    # Find cronograma section to reduce noise
+    cronograma_section = text
+    cronograma_match = re.search(
+        r"(CRONOGRAMA|Cronograma|DATAS\s+IMPORTANTES|Datas\s+Importantes)[^a-z]*?([\s\S]{0,8000}?)(?=\n(?:ANEXO|Anexo|$))",
+        text, re.I
+    )
+    if cronograma_match:
+        cronograma_section = cronograma_match.group(2)
+        logger.debug(f"Found cronograma section ({len(cronograma_section)} chars)")
+    
+    # Pattern 1: Inscrição (período)
+    inscr_patterns = [
+        r"Recebimento de Inscrições?\s*[:\-]?\s*(\d{1,2})[./\-](\d{1,2})[./\-](\d{4})\s+(?:a|ate|até)\s+(\d{1,2})[./\-](\d{1,2})[./\-](\d{4})",
+        r"Período de Inscrição\s*[:\-]?\s*(\d{1,2})[./\-](\d{1,2})[./\-](\d{4})\s+(?:a|ate|até)\s+(\d{1,2})[./\-](\d{1,2})[./\-](\d{4})",
+    ]
+    
+    for pattern in inscr_patterns:
+        inscr_match = re.search(pattern, cronograma_section, re.I)
+        if inscr_match:
+            try:
+                start_iso = _parse_date(f"{inscr_match.group(1)}/{inscr_match.group(2)}/{inscr_match.group(3)}")
+                end_iso = _parse_date(f"{inscr_match.group(4)}/{inscr_match.group(5)}/{inscr_match.group(6)}")
+                if start_iso:
+                    cronograma["inscricao_inicio"] = start_iso
+                if end_iso:
+                    cronograma["inscricao_fim"] = end_iso
                 break
-
+            except Exception:
+                pass
+    
+    # Pattern 2: Isenção (período de solicitação)
+    isencao_patterns = [
+        r"Período de solicitação de isenção?\s*[:\-]?\s*(\d{1,2})[./\-](\d{1,2})[./\-](\d{4})",
+        r"Solicitação de isenção?\s*[:\-]?\s*(\d{1,2})[./\-](\d{1,2})[./\-](\d{4})",
+    ]
+    
+    for pattern in isencao_patterns:
+        isencao_match = re.search(pattern, cronograma_section, re.I)
+        if isencao_match:
+            try:
+                iso = _parse_date(f"{isencao_match.group(1)}/{isencao_match.group(2)}/{isencao_match.group(3)}")
+                if iso:
+                    cronograma["isencao_inicio"] = iso
+                break
+            except Exception:
+                pass
+    
+    # Pattern 3: Provas
+    prova_patterns = [
+        r"Data provável (?:das|da) provas?\s*[:\-]?\s*(?:Entre\s+)?(\d{1,2})[./\-](\d{1,2})[./\-](\d{4})",
+        r"Data (?:das|da) provas?\s*[:\-]?\s*(\d{1,2})[./\-](\d{1,2})[./\-](\d{4})",
+        r"Realização (?:das|da) provas?\s*[:\-]?\s*(\d{1,2})[./\-](\d{1,2})[./\-](\d{4})",
+    ]
+    
+    for pattern in prova_patterns:
+        prova_match = re.search(pattern, cronograma_section, re.I)
+        if prova_match:
+            try:
+                iso = _parse_date(f"{prova_match.group(1)}/{prova_match.group(2)}/{prova_match.group(3)}")
+                if iso:
+                    cronograma["data_prova"] = iso
+                break
+            except Exception:
+                pass
+    
+    populated = sum(1 for v in cronograma.values() if v)
+    logger.debug(f"ETAPA 2 result: {populated}/{len(cronograma)} fields populated")
     return cronograma
+
 
 
 def extract_vagas(text: str) -> Dict[str, Optional[int]]:
@@ -373,7 +474,7 @@ def extract_from_pdf(path: str) -> Dict[str, Any]:
         logger.warning("No text extracted from PDF %s", path)
 
     metadata = extract_basic_metadata(text)
-    cronograma = extract_cronograma(text)
+    cronograma = extract_cronograma(text, pdf_path=path)
     vagas = extract_vagas(text)
     financeiro = extract_financeiro(text)
 

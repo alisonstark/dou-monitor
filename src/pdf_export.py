@@ -50,6 +50,17 @@ def save_concurso_pdf(concurso, output_dir="editais"):
     os.makedirs(output_dir, exist_ok=True)
     filename = os.path.join(output_dir, f"{concurso['url_title']}.pdf")
 
+    # If file exists and is locked, try to remove it first
+    if os.path.exists(filename):
+        try:
+            os.remove(filename)
+        except PermissionError:
+            # File is locked by another process (likely open in a PDF viewer)
+            # Return specific error message
+            return f"Error: File is locked or in use: {filename}\nClose any PDF viewer that has this file open and try again."
+        except Exception as e:
+            return f"Error removing old file: {e}"
+
     context = _get_browser_context()
     page = context.new_page()
     try:
@@ -61,6 +72,10 @@ def save_concurso_pdf(concurso, output_dir="editais"):
             print_background=True,
             prefer_css_page_size=True,
         )
+    except PermissionError:
+        return f"Error: Permission denied writing to {filename}\nEnsure the file is not open in another application."
+    except Exception as e:
+        return f"Error saving PDF: {e}"
     finally:
         page.close()
 
