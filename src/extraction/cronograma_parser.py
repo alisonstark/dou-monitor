@@ -53,8 +53,9 @@ def normalize_text(text: str) -> str:
     
     # STEP 1.5: Handle common table formats with activity on one line and date on next
     # "Activity name\nDD/MM/YYYY" or "Activity name\nDD/MM/YYYY a DD/MM/YYYY"
+    # Handles both singular (inscrição) and plural (inscrições)
     text = re.sub(
-        r'(inscri[çc][õo]es?[^\n]{0,100})\n\s*(\d{2}/\d{2}/\d{4}(?:\s+a\s+\d{2}/\d{2}/\d{4})?)',
+        r'(inscri[çc][ãõ][^\n]{0,100})\n\s*(\d{2}/\d{2}/\d{4}(?:\s+a\s+\d{2}/\d{2}/\d{4})?)',
         r'\1 \2',
         text,
         flags=re.IGNORECASE
@@ -82,11 +83,12 @@ def normalize_text(text: str) -> str:
         text
     )
     
-    # STEP 4: Fix broken "Entre"
+    # STEP 4: Fix broken "Entre" (handles both "Entre" and "entre")
     text = re.sub(
         r'Entre\s*\n\s*(\d{2}/\d{2}/\d{4})',
         r'Entre \1',
-        text
+        text,
+        flags=re.IGNORECASE
     )
     
     # STEP 5: Fix "Entre DD/MM/YYYY a [text] DD/MM/YYYY"
@@ -110,24 +112,24 @@ def parse_date_block(date_block: str) -> tuple[Optional[str], Optional[str]]:
     
     Handles:
     - "DD/MM/YYYY a DD/MM/YYYY"
-    - "Entre DD/MM/YYYY a/e DD/MM/YYYY"
+    - "Entre DD/MM/YYYY a/e DD/MM/YYYY" (handles both 'a' and 'e')
     - "DD/MM/YYYY" (single date)
     """
     date_block = date_block.strip()
     
-    # Range using "a"
-    if " a " in date_block:
-        parts = date_block.split(" a ")
-        if len(parts) == 2:
-            return to_iso(parts[0]), to_iso(parts[1])
-    
-    # Entre ... e/a ...
+    # Entre ... e/a ... (check first before splitting on "a")
     if date_block.lower().startswith("entre"):
         dates = re.findall(r'\d{2}/\d{2}/\d{4}', date_block)
         if len(dates) == 2:
             return to_iso(dates[0]), to_iso(dates[1])
         elif len(dates) == 1:
             return to_iso(dates[0]), None
+    
+    # Range using "a" (only if not an Entre phrase)
+    if " a " in date_block:
+        parts = date_block.split(" a ")
+        if len(parts) == 2:
+            return to_iso(parts[0]), to_iso(parts[1])
     
     # Single date
     return to_iso(date_block), None
@@ -136,14 +138,14 @@ def parse_date_block(date_block: str) -> tuple[Optional[str], Optional[str]]:
 def classify_event(event_text: str) -> str:
     """
     Classify event type from event text.
-    Returns one of: inscricao, isencao, prova, outro
+    Returns one of: inscricao, isencao, prova, resultado, recurso, publicacao, outro
     
-    Priority order matters - check more specific terms first.
-    Uses fuzzy matching to handle variations.
+    Strategy: Identify the primary event. Isenção and Inscrição are treated equally for extraction.
+    Homologação is dropped - we care about inscricao/isencao as the primary events.
     """
     e = event_text.lower()
     
-    # Check isenção BEFORE inscrição (more specific)
+    # Check isenção BEFORE inscrição (both are important, but check isenção first if both present)
     # Variations: isenção, isencao, isenç, isen
     if "isen" in e or "isençã" in e or "isenc" in e:
         return "isencao"
@@ -156,19 +158,17 @@ def classify_event(event_text: str) -> str:
     # Prova/exam related
     # Include variations: prova, aplicação, realização
     if any(word in e for word in ["prova", "aplicac", "aplicaç", "realizac", "realizaç"]):
-        # Additional check for "aplicação" or "realização" near "prova"
-        if "prova" in e or "aplicac" in e or "aplicaç" in e or "realizac" in e or "realizaç" in e:
-            return "prova"
+        return "prova"
     
-    # Other event types
+    # Other specific event types
     if "resultado" in e:
         return "resultado"
     if "recurso" in e:
         return "recurso"
-    if "homolog" in e:
-        return "homologacao"
     if "publica" in e:
         return "publicacao"
+    # Note: Homologação is intentionally NOT classified as a separate type
+    # It's used to find dates but we focus on inscricao/isencao
     
     return "outro"
 

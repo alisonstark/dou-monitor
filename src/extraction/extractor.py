@@ -91,7 +91,22 @@ def _extract_text_from_pdf(path: str) -> str:
 
 
 def _find_first_currency(text: str) -> Optional[str]:
-    match = re.search(r"R\$\s*[0-9\.,]+", text)
+    """Extract first R$ currency amount from text.
+    
+    Properly handles Brazilian currency format:
+    - R$ 100 (whole number)
+    - R$ 100,00 (with decimal)
+    - R$ 1.000 (with thousands separator)
+    - R$ 1.000,00 (thousands + decimal)
+    - R$ 1.000.000,50 (multiple thousands)
+    
+    Returns None if no valid currency found.
+    Does NOT capture trailing commas or other punctuation.
+    """
+    # Pattern: R$ followed by digits with optional thousands separator (dots)
+    # and optional decimal part (comma + 2 digits)
+    # Note: [0-9]+ allows any number of starting digits to handle cases like "5000"
+    match = re.search(r"R\$\s*[0-9]+(?:\.[0-9]{3})*(?:,[0-9]{2})?", text)
     return match.group(0) if match else None
 
 
