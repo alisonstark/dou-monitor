@@ -1,6 +1,7 @@
 from bs4 import BeautifulSoup
 
 import json
+import re
 import requests
 import time
 
@@ -32,16 +33,30 @@ def scrape_concursos(start_date, end_date, do_type='do3') -> list[dict]:
     )
 
     # Add retry logic with timeout
-    max_retries = 3
+    max_retries = 5
     for attempt in range(max_retries):
         try:
             response = requests.get(url, headers=HEADERS, timeout=30)
             response.raise_for_status()
             break
+        except requests.exceptions.HTTPError as e:
+            # Retry on 5xx server errors, don't retry on 4xx client errors
+            if 500 <= response.status_code < 600:
+                if attempt < max_retries - 1:
+                    wait_time = (2 ** attempt)  # Exponential backoff: 1s, 2s, 4s, 8s, 16s
+                    print(f"Server error ({response.status_code}). Retrying in {wait_time} seconds... (Attempt {attempt + 1}/{max_retries})")
+                    time.sleep(wait_time)
+                else:
+                    print(f"Server error ({response.status_code}) persisted after {max_retries} attempts")
+                    return []
+            else:
+                # Don't retry on client errors (4xx)
+                print(f"Client error ({response.status_code}): {e}")
+                return []
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
             if attempt < max_retries - 1:
-                wait_time = (attempt + 1) * 2  # Progressive backoff: 2s, 4s, 6s
-                print(f"Connection failed. Retrying in {wait_time} seconds... (Attempt {attempt + 1}/{max_retries})")
+                wait_time = (2 ** attempt)  # Exponential backoff: 1s, 2s, 4s, 8s, 16s
+                print(f"Connection failed: {type(e).__name__}. Retrying in {wait_time} seconds... (Attempt {attempt + 1}/{max_retries})")
                 time.sleep(wait_time)
             else:
                 print(f"Failed after {max_retries} attempts: {e}")
@@ -67,6 +82,10 @@ def scrape_concursos(start_date, end_date, do_type='do3') -> list[dict]:
         for result in results:
             url_title = result.get('urlTitle', '')
             title = result.get('title', '')
+            # Extract content from HTML span tags and remove the tags
+            title = re.sub(r'<span[^>]*>(.*?)</span>', r'\1', title)
+            # Remove consecutive duplicate words (case-insensitive)
+            title = re.sub(r'(\w+)(?:\s*\1)+', r'\1', title, flags=re.IGNORECASE)
             pub_date = result.get('pubDate', '')
             edition = result.get('editionNumber', '')
             pub_name = result.get('pubName', '')
