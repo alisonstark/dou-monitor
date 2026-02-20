@@ -41,6 +41,7 @@ def to_iso(date_str: str) -> Optional[str]:
 def normalize_text(text: str) -> str:
     """
     Normalize PDF text to handle broken line breaks and noise.
+    Handles multiple table formats commonly found in editais.
     """
     # STEP 1: Handle table format where label appears BETWEEN dates
     # "DD/MM/YYYY a URL\nLABEL\nDD/MM/YYYY" -> "LABEL DD/MM/YYYY a DD/MM/YYYY"
@@ -48,6 +49,27 @@ def normalize_text(text: str) -> str:
         r'(\d{2}/\d{2}/\d{4})\s+a\s+[^\n]*\n\s*([^\n]+)\n\s*(\d{2}/\d{2}/\d{4})',
         r'\2 \1 a \3',
         text
+    )
+    
+    # STEP 1.5: Handle common table formats with activity on one line and date on next
+    # "Activity name\nDD/MM/YYYY" or "Activity name\nDD/MM/YYYY a DD/MM/YYYY"
+    text = re.sub(
+        r'(inscri[çc][õo]es?[^\n]{0,100})\n\s*(\d{2}/\d{2}/\d{4}(?:\s+a\s+\d{2}/\d{2}/\d{4})?)',
+        r'\1 \2',
+        text,
+        flags=re.IGNORECASE
+    )
+    text = re.sub(
+        r'(isen[çc][ãa]o[^\n]{0,100})\n\s*(\d{2}/\d{2}/\d{4}(?:\s+a\s+\d{2}/\d{2}/\d{4})?)',
+        r'\1 \2',
+        text,
+        flags=re.IGNORECASE
+    )
+    text = re.sub(
+        r'((?:aplica[çc][ãa]o\s+da\s+)?provas?[^\n]{0,100})\n\s*(\d{2}/\d{2}/\d{4}(?:\s+a\s+\d{2}/\d{2}/\d{4})?)',
+        r'\1 \2',
+        text,
+        flags=re.IGNORECASE
     )
     
     # STEP 2: Remove URLs (after restructuring table)
@@ -75,8 +97,9 @@ def normalize_text(text: str) -> str:
         flags=re.IGNORECASE
     )
     
-    # STEP 6: Collapse excessive whitespace
-    text = re.sub(r'\s+', ' ', text)
+    # STEP 6: Collapse excessive whitespace (but preserve single line breaks for structure)
+    text = re.sub(r'[ \t]+', ' ', text)  # Collapse spaces/tabs
+    text = re.sub(r'\n{3,}', '\n\n', text)  # Max 2 consecutive newlines
     
     return text.strip()
 
@@ -116,20 +139,26 @@ def classify_event(event_text: str) -> str:
     Returns one of: inscricao, isencao, prova, outro
     
     Priority order matters - check more specific terms first.
+    Uses fuzzy matching to handle variations.
     """
     e = event_text.lower()
     
     # Check isenção BEFORE inscrição (more specific)
-    if "isen" in e or "isençã" in e:
+    # Variations: isenção, isencao, isenç, isen
+    if "isen" in e or "isençã" in e or "isenc" in e:
         return "isencao"
     
     # Then check inscrição
-    if "inscri" in e:
+    # Variations: inscrição, inscricao, inscriçõ, inscri
+    if "inscri" in e or "inscric" in e:
         return "inscricao"
     
     # Prova/exam related
-    if "prova" in e:
-        return "prova"
+    # Include variations: prova, aplicação, realização
+    if any(word in e for word in ["prova", "aplicac", "aplicaç", "realizac", "realizaç"]):
+        # Additional check for "aplicação" or "realização" near "prova"
+        if "prova" in e or "aplicac" in e or "aplicaç" in e or "realizac" in e or "realizaç" in e:
+            return "prova"
     
     # Other event types
     if "resultado" in e:
@@ -153,10 +182,16 @@ def extract_all_dates(text: str) -> List[Dict]:
     - data_inicio: str (ISO date)
     - data_fim: str | None (ISO date for ranges)
     - tipo: str (event classification)
+    
+    Uses two strategies:
+    1. Standard approach: find dates and look backward for context
+    2. Keyword approach: find keywords (inscrição, isenção, prova) and look forward for dates
     """
     text = normalize_text(text)
     results = []
+    seen_dates = set()  # Track to avoid duplicates
     
+    # Strategy 1: Find dates and look backward for context
     for match in DATE_PATTERN.finditer(text):
         date_block = match.group(0)
         start_index = match.start()
@@ -179,12 +214,56 @@ def extract_all_dates(text: str) -> List[Dict]:
         data_inicio, data_fim = parse_date_block(date_block)
         
         if data_inicio:  # Only add if we successfully parsed at least start date
-            results.append({
-                "evento": event_text,
-                "data_inicio": data_inicio,
-                "data_fim": data_fim,
-                "tipo": classify_event(event_text)
-            })
+            date_key = f"{data_inicio}|{data_fim}|{event_text[:50]}"
+            if date_key not in seen_dates:
+                seen_dates.add(date_key)
+                results.append({
+                    "evento": event_text,
+                    "data_inicio": data_inicio,
+                    "data_fim": data_fim,
+                    "tipo": classify_event(event_text)
+                })
+    
+    # Strategy 2: Keyword-based search for critical events
+    # Look for keywords and find dates immediately after them
+    keywords = [
+        (r'inscri[çc][õo]es?', 'inscricao'),
+        (r'isen[çc][ãa]o', 'isencao'),
+        (r'(?:aplica[çc][ãa]o\s+da\s+)?provas?(?:\s+objetivas?)?', 'prova'),
+        (r'realiza[çc][ãa]o\s+da\s+provas?', 'prova'),
+    ]
+    
+    for keyword_pattern, tipo in keywords:
+        # Find keyword occurrences
+        for kw_match in re.finditer(keyword_pattern, text, re.IGNORECASE):
+            kw_start = kw_match.start()
+            kw_text = kw_match.group(0)
+            
+            # Look forward up to 200 chars for dates
+            context_end = min(len(text), kw_start + 200)
+            forward_context = text[kw_start:context_end]
+            
+            # Find dates in forward context
+            for date_match in DATE_PATTERN.finditer(forward_context):
+                date_block = date_match.group(0)
+                data_inicio, data_fim = parse_date_block(date_block)
+                
+                if data_inicio:
+                    # Extract fuller event description (backward + keyword + some forward)
+                    back_start = max(0, kw_start - 50)
+                    event_text = text[back_start:kw_start + 100].strip()
+                    event_text = re.sub(r'[:\-–]+$', '', event_text).strip()
+                    
+                    date_key = f"{data_inicio}|{data_fim}|{tipo}"
+                    if date_key not in seen_dates:
+                        seen_dates.add(date_key)
+                        results.append({
+                            "evento": event_text,
+                            "data_inicio": data_inicio,
+                            "data_fim": data_fim,
+                            "tipo": tipo
+                        })
+                        break  # Take first date found after this keyword
     
     return results
 
@@ -252,29 +331,69 @@ class CronogramaParser:
             logger.debug(f"Extracted {len(events)} date events from full text")
         
         # Map events to our 4 essential fields
-        # Prefer date ranges over single dates for prova
+        # Strategy: prefer keyword-based matches over generic ones
+        # First pass: process keyword-based matches (more reliable)
         prova_range = None
         
+        # Separate events by confidence (keyword-based vs backward-looking)
+        high_confidence = []
+        low_confidence = []
+        
         for event in events:
+            # High confidence: event text contains the actual keyword
+            event_lower = event["evento"].lower()
+            if event["tipo"] == "inscricao" and "inscri" in event_lower:
+                high_confidence.append(event)
+            elif event["tipo"] == "isencao" and "isen" in event_lower:
+                high_confidence.append(event)
+            elif event["tipo"] == "prova" and ("prova" in event_lower or "aplica" in event_lower or "realiza" in event_lower):
+                high_confidence.append(event)
+            else:
+                low_confidence.append(event)
+        
+        # Process high confidence events first
+        for event in high_confidence:
             tipo = event["tipo"]
             
             if tipo == "inscricao" and not result["inscricao_inicio"]:
                 result["inscricao_inicio"] = event["data_inicio"]
                 result["inscricao_fim"] = event["data_fim"]
-                logger.debug(f"Found inscricao: {event['data_inicio']} - {event['data_fim']}")
+                logger.debug(f"Found inscricao (HC): {event['data_inicio']} - {event['data_fim']}")
             
             elif tipo == "isencao" and not result["isencao_inicio"]:
                 result["isencao_inicio"] = event["data_inicio"]
-                logger.debug(f"Found isencao: {event['data_inicio']}")
+                logger.debug(f"Found isencao (HC): {event['data_inicio']}")
             
             elif tipo == "prova":
                 # Prefer ranges over single dates
                 if event["data_fim"] and not prova_range:
                     prova_range = event
-                    logger.debug(f"Found prova range: {event['data_inicio']} - {event['data_fim']}")
+                    logger.debug(f"Found prova range (HC): {event['data_inicio']} - {event['data_fim']}")
                 elif not result["data_prova"] and not event["data_fim"]:
                     result["data_prova"] = event["data_inicio"]
-                    logger.debug(f"Found prova single: {event['data_inicio']}")
+                    logger.debug(f"Found prova single (HC): {event['data_inicio']}")
+        
+        # Then process low confidence events (only fill gaps)
+        for event in low_confidence:
+            tipo = event["tipo"]
+            
+            if tipo == "inscricao" and not result["inscricao_inicio"]:
+                result["inscricao_inicio"] = event["data_inicio"]
+                result["inscricao_fim"] = event["data_fim"]
+                logger.debug(f"Found inscricao (LC): {event['data_inicio']} - {event['data_fim']}")
+            
+            elif tipo == "isencao" and not result["isencao_inicio"]:
+                result["isencao_inicio"] = event["data_inicio"]
+                logger.debug(f"Found isencao (LC): {event['data_inicio']}")
+            
+            elif tipo == "prova":
+                # Prefer ranges over single dates
+                if event["data_fim"] and not prova_range:
+                    prova_range = event
+                    logger.debug(f"Found prova range (LC): {event['data_inicio']} - {event['data_fim']}")
+                elif not result["data_prova"] and not event["data_fim"]:
+                    result["data_prova"] = event["data_inicio"]
+                    logger.debug(f"Found prova single (LC): {event['data_inicio']}")
         
         # Use prova range if found, otherwise keep single date
         if prova_range:

@@ -4,3 +4,6 @@ __pycache__/
 data/backups/
 data/summaries/
 data/review_*.csv
+src/cronograma_parser.py.backup
+outros/
+MELHORIAS_PARSER.md

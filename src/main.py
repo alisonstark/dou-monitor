@@ -1,8 +1,8 @@
 import argparse
 from datetime import datetime, timedelta
 
-from scraper import scrape_concursos
-from extractor import save_extraction_json
+from extraction.scraper import scrape_concursos
+from extraction.extractor import save_extraction_json
 import os
 import unicodedata
 
@@ -36,7 +36,7 @@ def process_abertura_concursos(abertura_concursos, export_pdf):
         if export_pdf:
             try:
                 # Import lazily so preview mode doesn't require Playwright to be installed
-                from pdf_export import save_concurso_pdf
+                from export.pdf_export import save_concurso_pdf
             except Exception as e:
                 errors += 1
                 print(f"Error importing Playwright/pdf_export: {e}")
