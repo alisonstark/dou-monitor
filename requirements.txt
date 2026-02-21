@@ -1,3 +1,5 @@
 playwright
 pdfplumber
 dateparser
+bs4
+requests
