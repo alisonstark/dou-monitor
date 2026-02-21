@@ -181,6 +181,9 @@ python -m playwright install
 Developer debugging guide
 - A step-by-step walkthrough is available at `docs/debugger_walkthrough.md` (ignored by Git by default). It explains the pipeline flow, main functions to inspect, and quick interactive checks for common problems.
 
+Scheduling guide
+- Weekly automation with notifications (cron/systemd) is documented in `docs/scheduling.md`.
+
 ---
 
 ## Quick Start Summary
