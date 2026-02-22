@@ -1,149 +1,150 @@
-# DOU-monitor — Debugger-style Walkthrough (educational)
+# DOU-monitor — Passo a Passo para Depuração (educacional)
 
-Purpose: This document walks you through a fictional run of the tool and explains, step-by-step, which components are executed, what to expect at each stage, and which functions to inspect when debugging. It is intentionally pragmatic and points to the main/secondary functions used.
+Propósito: Este documento guia você através de uma execução fictícia da ferramenta e explica, passo a passo, quais componentes são executados, o que esperar em cada etapa e quais funções inspecionar durante a depuração. É intencionalmente pragmático e aponta para as funções principais/secundárias usadas.
 
-Note: this file is for learning and local debugging only. It is added to `.gitignore` by default.
+Nota: este arquivo é apenas para aprendizado e depuração local. Está adicionado ao `.gitignore` por padrão.
 
-Overview (single run)
+Visão geral (execução única)
 
-- Input: a date range (default last 7 days) passed to `src/main.py` (or run without args)
-- Overall pipeline:
-  1. `main.py` calls `scrape_concursos(start_date, end_date)` (in `src/scraper.py`) to collect candidate DOU entries.
- 2. `main.py` filters results for opening notices (keywords like `abertura`, `início`).
- 3. For each relevant entry `process_abertura_concursos()` will either preview content or export a PDF (`src/pdf_export.py`).
- 4. When a PDF is saved, `main.py` calls `save_extraction_json(...)` (in `src/extractor.py`) to create a structured JSON summary in `data/summaries/`.
- 5. You can generate a human-review CSV via `src/review_cli.py`, and apply corrections with `src/apply_review.py` (which also exports reviewed examples). Use `src/update_whitelist.py` to propose whitelist updates from reviewed examples.
+- Entrada: um intervalo de datas (padrão últimos 7 dias) passado para `src/main.py` (ou execute sem argumentos)
+- Pipeline geral:
+  1. `main.py` chama `scrape_concursos(start_date, end_date)` (em `src/scraper.py`) para coletar entradas candidatas do DOU.
+ 2. `main.py` filtra resultados por avisos de abertura (palavras-chave como `abertura`, `início`).
+ 3. Para cada entrada relevante, `process_abertura_concursos()` irá visualizar o conteúdo ou exportar um PDF (`src/pdf_export.py`).
+ 4. Quando um PDF é salvo, `main.py` chama `save_extraction_json(...)` (em `src/extractor.py`) para criar um resumo JSON estruturado em `data/summaries/`.
+ 5. Você pode gerar um CSV para revisão humana via `src/review_cli.py`, e aplicar correções com `src/apply_review.py` (que também exporta exemplos revisados). Use `src/update_whitelist.py` para propor atualizações de whitelist a partir dos exemplos revisados.
 
 
-Step-by-step example (fictional input)
+Exemplo passo a passo (entrada fictícia)
 
-Assume you run the tool to process DOU for 10-Feb-2026 to 19-Feb-2026.
+Assuma que você execute a ferramenta para processar o DOU de 10-Fev-2026 a 19-Fev-2026.
 
-1) Start the pipeline
+1) Inicie o pipeline
 
-Command:
-```
+Comando:
+\`\`\`
 python src/main.py --export-pdf
-```
+\`\`\`
 
-What happens and where to look
-- `src/main.py` (entrypoint)
-  - `scrape_concursos(start_date, end_date)` (in `src/scraper.py`) — retrieves a list of dicts like `{ 'url', 'title', 'date', 'edition', 'section', 'url_title' }`.
-  - Filtering: `main.py` keeps entries whose `title` contains keywords (`abertura`, `início`, `iniciado`).
+O que acontece e onde procurar
+- `src/main.py` (ponto de entrada)
+  - `scrape_concursos(start_date, end_date)` (em `src/scraper.py`) — recupera uma lista de dicts como `{ 'url', 'title', 'date', 'edition', 'section', 'url_title' }`.
+  - Filtragem: `main.py` mantém entradas cujo `title` contém palavras-chave (`abertura`, `início`, `iniciado`).
 
-2) For each selected `concurso` (opening notice)
+2) Para cada `concurso` selecionado (aviso de abertura)
 
-- If `--export-pdf` is set:
-  - `save_concurso_pdf(concurso)` in `src/pdf_export.py` opens the page with Playwright, prints the page as PDF, and saves it to `editais/{url_title}.pdf`.
-  - Immediately after `save_concurso_pdf`, `main.py` calls `save_extraction_json(pdf_path)` from the extractor.
+- Se `--export-pdf` estiver definido:
+  - `save_concurso_pdf(concurso)` em `src/pdf_export.py` abre a página com Playwright, imprime a página como PDF e salva em `editais/{url_title}.pdf`.
+  - Imediatamente após `save_concurso_pdf`, `main.py` chama `save_extraction_json(pdf_path)` do extrator.
 
-- If not exporting PDF (preview mode):
-  - `get_concurso_preview_lines(concurso, max_lines)` in `src/scraper.py` fetches the HTML and returns the first lines (uses `requests` + BeautifulSoup).
+- Se não estiver exportando PDF (modo visualização):
+  - `get_concurso_preview_lines(concurso, max_lines)` em `src/scraper.py` busca o HTML e retorna as primeiras linhas (usa `requests` + BeautifulSoup).
 
-3) PDF → JSON extraction (core area for debugging)
+3) Extração PDF → JSON (área principal para depuração)
 
-- Entry: `save_extraction_json(path_pdf, out_dir='data/summaries')` in `src/extractor.py`.
-  - Calls `extract_from_pdf(path)` which uses `_extract_text_from_pdf(path)`.
-  - `_extract_text_from_pdf` tries `pdfplumber` (fallback: log warning and return empty string).
+- Entrada: `save_extraction_json(path_pdf, out_dir='data/summaries')` em `src/extractor.py`.
+  - Chama `extract_from_pdf(path)` que usa `_extract_text_from_pdf(path)`.
+  - `_extract_text_from_pdf` tenta `pdfplumber` (fallback: registra aviso e retorna string vazia).
 
-Primary extraction functions (what they do)
+Funções de extração primárias (o que fazem)
 - `extract_basic_metadata(text)`
-  - Extracts `orgao`, `edital_numero`, `cargo`, `banca` and `data_publicacao_dou`.
-  - Uses header heuristics (e.g., lines around the `EDITAL` tag).
-  - `banca` extraction is layered and returns a dict: `{ nome, tipo, confianca_extracao, snippet }`.
+  - Extrai `orgao`, `edital_numero`, `cargo`, `banca` e `data_publicacao_dou`.
+  - Usa heurísticas de cabeçalho (por exemplo, linhas ao redor da tag `EDITAL`).
+  - Extração de `banca` é em camadas e retorna um dict: `{ nome, tipo, confianca_extracao, snippet }`.
 
 - `extract_cronograma(text)`
-  - Heuristics to detect important dates: inscrição (start/end), isenção, data da prova, resultado da isenção.
-  - Uses regex patterns for `dd/mm/yyyy` and `d de mês de yyyy` and `dateparser` when available.
+  - Heurísticas para detectar datas importantes: inscrição (início/fim), isenção, data da prova, resultado da isenção.
+  - Usa padrões regex para `dd/mm/yyyy` e `d de mês de yyyy` e `dateparser` quando disponível.
 
 - `extract_vagas(text)`
-  - Tries to capture `total`, `pcd`, `ppiq`, with simple regex and consistency checks (e.g., discard `pcd` if > total).
+  - Tenta capturar `total`, `pcd`, `ppiq`, com regex simples e verificações de consistência (por exemplo, descartar `pcd` se > total).
 
 - `extract_financeiro(text)`
-  - Finds currency patterns `R$` for `taxa_inscricao` and tries to capture `remuneracao_inicial` near keywords like `Remuneração`, `Vencimento`.
+  - Encontra padrões de moeda `R$` para `taxa_inscricao` e tenta capturar `remuneracao_inicial` próximo a palavras-chave como `Remuneração`, `Vencimento`.
 
-Secondary helpers (mention only)
-- `_find_first_currency`, `_parse_date`, `_load_whitelist` (loads `data/bancas_whitelist.json`), `extract_banca_struct` (the layered banca extractor), `extract_from_pdf`, `save_extraction_json`.
+Auxiliares secundários (apenas menção)
+- `_find_first_currency`, `_parse_date`, `_load_whitelist` (carrega `data/bancas_whitelist.json`), `extract_banca_struct` (o extrator de banca em camadas), `extract_from_pdf`, `save_extraction_json`.
 
-4) Output and where to inspect
+4) Saída e onde inspecionar
 
-- JSON summary saved to: `data/summaries/{pdf_basename}.json`.
-- Fields of interest:
+- Resumo JSON salvo em: `data/summaries/{pdf_basename}.json`.
+- Campos de interesse:
   - `metadata`: `{ orgao, edital_numero, cargo, banca (dict), data_publicacao_dou }`
-  - `cronograma`: date fields (ISO strings when parseable)
+  - `cronograma`: campos de data (strings ISO quando parseáveis)
   - `vagas`: `{ total, pcd, ppiq }`
   - `financeiro`: `{ taxa_inscricao, remuneracao_inicial }`
 
-Tip: open the JSON and inspect `metadata.banca.snippet` — it shows the text region used to decide the banca. If extraction looks wrong, the snippet helps you craft a better regex or add the name to the whitelist.
+Dica: abra o JSON e inspecione `metadata.banca.snippet` — mostra a região de texto usada para decidir a banca. Se a extração parecer errada, o snippet ajuda você a criar um regex melhor ou adicionar o nome à whitelist.
 
-5) Human-in-the-loop review
+5) Revisão humana no circuito
 
-- Generate a CSV: `python src/review_cli.py --summaries-dir data/summaries` → writes `data/review_<timestamp>.csv`.
-  - Key function: `compute_confidence(item)` (scores extraction, returns issues list).
+- Gere um CSV: `python src/review_cli.py --summaries-dir data/summaries` → gera `data/review_<timestamp>.csv`.
+  - Função chave: `compute_confidence(item)` (pontua extração, retorna lista de problemas).
 
-- Edit the CSV manually to correct fields (e.g., fix `banca` name)
+- Edite o CSV manualmente para corrigir campos (por exemplo, corrigir nome da `banca`)
 
-- Apply corrections: dry-run to preview changes:
-  ```bash
+- Aplicar correções: dry-run para visualizar mudanças:
+  \`\`\`bash
   python src/apply_review.py --csv data/review_YYYYMMDDT...csv
-  ```
+  \`\`\`
 
-- Apply corrections (writes JSON, makes backups, and exports reviewed examples for training):
-  ```bash
+- Aplicar correções (grava JSON, cria backups e exporta exemplos revisados para treinamento):
+  \`\`\`bash
   python src/apply_review.py --csv data/review_YYYYMMDDT...csv --apply --reviewer "SeuNome"
-  ```
-  - `apply_review.apply_row()` is the main function that applies one CSV row: it creates backups (`data/backups/`), updates JSON, and exports an example to `data/reviewed_examples/` containing `changes` and the original `snippet`.
+  \`\`\`
+  - `apply_review.apply_row()` é a função principal que aplica uma linha CSV: cria backups (`data/backups/`), atualiza JSON e exporta um exemplo para `data/reviewed_examples/` contendo `changes` e o `snippet` original.
 
-6) From reviewed examples → whitelist update (learning pipeline)
+6) De exemplos revisados → atualização da whitelist (pipeline de aprendizado)
 
-- `src/update_whitelist.py` reads `data/reviewed_examples/*.json` and suggests candidates that appear at least `--threshold` times.
-  - Dry-run: `python src/update_whitelist.py --threshold 3` (lists candidates)
-  - Apply: `python src/update_whitelist.py --threshold 3 --apply` → updates `data/bancas_whitelist.json`.
+- `src/update_whitelist.py` lê `data/reviewed_examples/*.json` e sugere candidatos que aparecem pelo menos `--threshold` vezes.
+  - Dry-run: `python src/update_whitelist.py --threshold 3` (lista candidatos)
+  - Aplicar: `python src/update_whitelist.py --threshold 3 --apply` → atualiza `data/bancas_whitelist.json`.
 
-- The extractor uses `data/bancas_whitelist.json` automatically on next runs.
+- O extrator usa `data/bancas_whitelist.json` automaticamente nas próximas execuções.
 
-Debugging checklist and quick tests
+Checklist de depuração e testes rápidos
 
-- If extraction returns empty JSON or fields are missing:
-  - Check `data/summaries/{file}.json` to see `metadata.banca.snippet` and `cronograma` windows.
-  - Run small interactive tests:
-    ```python
+- Se a extração retornar JSON vazio ou campos estiverem faltando:
+  - Verifique `data/summaries/{file}.json` para ver `metadata.banca.snippet` e janelas de `cronograma`.
+  - Execute pequenos testes interativos:
+    \`\`\`python
     from src.extractor import _extract_text_from_pdf, extract_basic_metadata
     txt = _extract_text_from_pdf('editais/example.pdf')
     print(extract_basic_metadata(txt))
-    ```
-  - If text is empty, confirm `pdfplumber` is installed in the virtualenv and that PDF is not an image-only scan.
+    \`\`\`
+  - Se o texto estiver vazio, confirme que `pdfplumber` está instalado no virtualenv e que o PDF não é apenas um scan de imagem.
 
-- If `banca` is wrong:
-  - Inspect `metadata.banca.snippet` in the JSON.
-  - If the name is a known vendor, add it to `data/bancas_whitelist.json` (or run `update_whitelist.py` after applying corrections).
+- Se `banca` estiver errada:
+  - Inspecione `metadata.banca.snippet` no JSON.
+  - Se o nome for um fornecedor conhecido, adicione-o a `data/bancas_whitelist.json` (ou execute `update_whitelist.py` após aplicar correções).
 
-- If `vagas` shows implausible numbers:
-  - Open the PDF page and search for the `Quadro de Vagas` or `ANEXO` table — use `pdfplumber` table extraction manually to inspect bounding boxes.
+- Se `vagas` mostrar números implausíveis:
+  - Abra a página do PDF e procure pela tabela `Quadro de Vagas` ou `ANEXO` — use extração de tabela do `pdfplumber` manualmente para inspecionar caixas delimitadoras.
 
-- For date parsing issues:
-  - Confirm `dateparser` is installed; otherwise `_parse_date` returns `None`.
+- Para problemas de parsing de data:
+  - Confirme que `dateparser` está instalado; caso contrário, `_parse_date` retorna `None`.
 
-Files & locations (summary)
+Arquivos e localizações (resumo)
 
-- `src/main.py` — orchestration and CLI flag `--export-pdf` (preview vs export flows)
+- `src/main.py` — orquestração e flag CLI `--export-pdf` (fluxos de visualização vs exportação)
 - `src/scraper.py` — `scrape_concursos`, `get_concurso_preview_lines` (requests + BeautifulSoup)
-- `src/pdf_export.py` — Playwright-based `save_concurso_pdf`
-- `src/extractor.py` — extraction pipeline (text extraction, metadata/vagas/cronograma/financeiro)
-- `src/review_cli.py` — generate review CSV (`compute_confidence`, `generate_csv`)
-- `src/apply_review.py` — apply CSV corrections and export reviewed examples
-- `src/update_whitelist.py` — suggest / apply whitelist updates from reviewed examples
-- `data/summaries/` — JSON summaries (output of extractor)
-- `data/review_*.csv` — human review CSVs
-- `data/reviewed_examples/` — exported corrected examples (used by `update_whitelist.py`)
-- `data/bancas_whitelist.json` — editable whitelist for known bancas
+- `src/pdf_export.py` — `save_concurso_pdf` baseado em Playwright
+- `src/extractor.py` — pipeline de extração (extração de texto, metadata/vagas/cronograma/financeiro)
+- `src/review_cli.py` — gera CSV de revisão (`compute_confidence`, `generate_csv`)
+- `src/apply_review.py` — aplica correções do CSV e exporta exemplos revisados
+- `src/update_whitelist.py` — sugere / aplica atualizações de whitelist de exemplos revisados
+- `data/summaries/` — resumos JSON (saída do extrator)
+- `data/review_*.csv` — CSVs de revisão humana
+- `data/reviewed_examples/` — exemplos corrigidos exportados (usados por `update_whitelist.py`)
+- `data/bancas_whitelist.json` — whitelist editável para bancas conhecidas
 
-Final notes
+Notas finais
 
-- Applying corrections via `apply_review.py --apply` is required to produce `data/reviewed_examples/`, which `update_whitelist.py` consumes. The extractor will pick up whitelist changes automatically on the next run (no code changes required).
-- The project intentionally separates data corrections (applied to JSON) from extractor heuristics — you must run `update_whitelist.py --apply` to update the whitelist file or modify `src/extractor.py` heuristics to change behavior.
+- Aplicar correções via `apply_review.py --apply` é necessário para produzir `data/reviewed_examples/`, que o `update_whitelist.py` consome. O extrator pegará mudanças na whitelist automaticamente na próxima execução (sem mudanças de código necessárias).
+- O projeto intencionalmente separa correções de dados (aplicadas ao JSON) de heurísticas do extrator — você deve executar `update_whitelist.py --apply` para atualizar o arquivo de whitelist ou modificar heurísticas em `src/extractor.py` para mudar o comportamento.
 
-Happy debugging! Use the snippets included in `metadata.banca.snippet` to rapidly iterate on regexes and whitelist entries.
+Boa depuração! Use os snippets incluídos em `metadata.banca.snippet` para iterar rapidamente em regexes e entradas de whitelist.
 
 ---
-Generated: 2026-02-19
+Gerado: 2026-02-19
+

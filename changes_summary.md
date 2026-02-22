@@ -1,97 +1,113 @@
-# Changes Summary
+# Resumo de Mudanças
 
-## Date: February 20, 2026
+## Data: 21 de fevereiro de 2026
 
-### 1. Enhanced Cronograma Parser - Multi-Format Support
+### 1. Sistema de Agendamento Automático e Notificações
 
-**Problem:** The parser struggled with different edital formats from various agencies. Some use "Das etapas do processo seletivo", others "Cronograma", with varying column layouts and date presentations.
+**Novidade:** Implementado sistema completo de execução agendada com notificações.
 
-**Solution:** Implemented dual-strategy extraction:
-- **Strategy 1 (Keyword-based):** Searches for keywords ("inscrição", "isenção", "prova") and looks forward for dates
-- **Strategy 2 (Context-based):** Finds dates and looks backward for context (original approach)  
-- **Confidence ranking:** Prioritizes events where keyword appears explicitly in context
-- **Improved normalization:** Handles tables where activity and date appear on separate lines
+**Componentes adicionados:**
+- `src/cli/scheduled_run.py`: Runner dedicado que executa `main.py`, analisa a contagem de concursos de abertura e envia notificações quando o threshold é atingido
+- `docs/scheduling.md`: Documentação completa em português sobre configuração de cron e systemd
 
-**Results:**
-- Petrobras 2017: Now returns both inscrição and prova dates (previously nothing)
-- Banco do Brasil 2021: Correctly identifies prova dates (previously only generic context)
-- Maintains backward compatibility with existing working editais
+**Funcionalidades:**
+- Execução automática via cron (agendamento baseado em tempo) ou systemd timer (recomendado)
+- Suporte a múltiplos canais de notificação com prioridade:
+  1. Email SMTP (configurável via variáveis de ambiente)
+  2. Webhook (Slack, Discord, endpoints personalizados)
+  3. Notificações desktop via `notify-send`
+- Threshold configurável (padrão: notificar quando ≥ 1 concurso de abertura é encontrado)
+- Janela de busca personalizável via flag `--days`
+- Salva logs opcionais para auditoria e debugging
 
-**Files Modified:**
-- `src/extraction/cronograma_parser.py`: Enhanced extraction strategies
+**Casos de uso:**
+- Monitoramento semanal automático do DOU
+- Alertas por email quando novos editais de abertura são publicados
+- Integração com ferramentas de produtividade (Slack, Discord, etc.)
 
-### 2. Project Restructuring - Improved Separation of Concerns
+**Arquivos modificados/adicionados:**
+- Novo: `src/cli/scheduled_run.py`
+- Novo: `docs/scheduling.md` (traduzido para português)
+- Atualizado: `README.md` (adicionada seção de agendamento)
+- Atualizado: `docs/debugger_walkthrough.md` (traduzido para português)
+- Atualizado: `changes_summary.md` (traduzido para português)
 
-**Problem:** All modules in flat `src/` directory made it harder to understand responsibilities.
+---
 
-**Solution:** Reorganized into focused packages:
-```
+## Data: 20 de fevereiro de 2026
+
+### 1. Reestruturação do Projeto - Separação Melhorada de Responsabilidades
+
+**Problema:** Todos os módulos no diretório `src/` plano dificultavam entender responsabilidades.
+
+**Solução:** Reorganizado em pacotes focados:
+\`\`\`
 src/
-├── extraction/        # PDF scraping, parsing, date extraction
-├── processing/        # Applying reviews, updating whitelists
-├── export/           # Output generation (PDFs, JSON)
-└── cli/              # Command-line user interfaces
-```
+├── extraction/        # Scraping de PDF, parsing, extração de datas
+├── processing/        # Aplicação de revisões, atualização de whitelists
+├── export/           # Geração de saídas (PDFs, JSON)
+└── cli/              # Interfaces de linha de comando
+\`\`\`
 
-**Benefits:**
-- Clear separation of responsibilities
-- Easier to find and modify related functionality
-- Better testability (each package independently)
-- More scalable for future features
+**Benefícios:**
+- Separação clara de responsabilidades
+- Mais fácil encontrar e modificar funcionalidades relacionadas
+- Melhor testabilidade (cada pacote independentemente)
+- Mais escalável para recursos futuros
 
-**Files Reorganized:**
+**Arquivos Reorganizados:**
 - `extraction/`: scraper.py, extractor.py, cronograma_parser.py
 - `processing/`: apply_review.py, update_whitelist.py
 - `export/`: pdf_export.py
 - `cli/`: review_cli.py
 
-**All imports updated:** main.py and all cross-module imports verified working
+**Todos os imports atualizados:** main.py e todas as importações entre módulos verificadas funcionando
 
-### 3. Documentation Updates
+### 2. Atualizações de Documentação
 
-- Updated README.md with multi-format capabilities info
-- Added project architecture diagram showing new package structure
-- Documented dual extraction strategies in cronograma parser section
-
----
-
-## Date: February 19, 2026 (Summary of Previous Session)
-
-### Major Additions
-
-1. **PDF → JSON Extraction Pipeline** (`src/extraction/extractor.py`)
-   - Structured field extraction: metadata, cronograma, vagas, financeiro
-   - Uses pdfplumber for PDF parsing
-   - Heuristics-based extraction with fallback normalization
-
-2. **Human-in-the-Loop Review System**
-   - `src/cli/review_cli.py`: Generate review CSVs with confidence scores
-   - `src/processing/apply_review.py`: Apply corrections back to JSON summaries with backups
-
-3. **Self-Improving Whitelist System** (`src/processing/update_whitelist.py`)
-   - Learns from manual corrections
-   - Two-stage usage: validation (normalize) + fallback extraction (improve)
-   - Maintains separate whitelists for bancas and cargos
-
-4. **Production Cronograma Parser** (`src/extraction/cronograma_parser.py`)
-   - Section-based extraction optimization
-   - Semantic date extraction with text normalization
-   - Handles various PDF formats and table layouts
+- Atualizado README.md com informações sobre capacidades multi-formato
+- Adicionado diagrama de arquitetura do projeto mostrando nova estrutura de pacotes
+- Documentadas estratégias de extração dupla na seção do parser de cronograma
 
 ---
 
-## Date: February 18, 2026 (Initial Session)
+## Data: 19 de fevereiro de 2026 (Resumo da Sessão Anterior)
 
-### Problems Fixed
+### Adições Principais
 
-1. **Connection Error:** Added realistic browser headers to bypass bot detection
-2. **Search Results Parsing:** Switched from HTML link parsing to embedded JSON parsing
-3. **PDF Quality:** Replaced manual PDF generation with Playwright-based printing
+1. **Pipeline de Extração PDF → JSON** (`src/extraction/extractor.py`)
+   - Extração de campos estruturados: metadata, cronograma, vagas, financeiro
+   - Usa pdfplumber para parsing de PDF
+   - Extração baseada em heurísticas com normalização de fallback
 
-### Initial Features
+2. **Sistema de Revisão Humana no Circuito**
+   - `src/cli/review_cli.py`: Gera CSVs de revisão com pontuações de confiança
+   - `src/processing/apply_review.py`: Aplica correções de volta aos resumos JSON com backups
 
-- DOU scraping with retry logic and timeout handling
-- Keyword filtering (abertura, inicio, iniciado)
-- Preview mode and PDF export via Playwright
-- Organized output with clear separators
+3. **Sistema de Whitelist Auto-Melhorador** (`src/processing/update_whitelist.py`)
+   - Aprende com correções manuais
+   - Uso em dois estágios: validação (normalizar) + extração de fallback (melhorar)
+   - Mantém whitelists separadas para bancas e cargos
+
+4. **Parser de Cronograma em Produção** (`src/extraction/cronograma_parser.py`)
+   - Otimização de extração baseada em seções
+   - Extração semântica de datas com normalização de texto
+   - Gerencia vários formatos de PDF e layouts de tabela
+
+---
+
+## Data: 18 de fevereiro de 2026 (Sessão Inicial)
+
+### Problemas Corrigidos
+
+1. **Erro de Conexão:** Adicionados cabeçalhos de navegador realistas para evitar detecção de bots
+2. **Parsing de Resultados de Busca:** Mudado de parsing de links HTML para parsing de JSON embutido
+3. **Qualidade de PDF:** Substituída geração manual de PDF por impressão baseada em Playwright
+
+### Recursos Iniciais
+
+- Scraping do DOU com lógica de retry e tratamento de timeout
+- Filtragem por palavras-chave (abertura, inicio, iniciado)
+- Modo visualização e exportação de PDF via Playwright
+- Saída organizada com separadores claros
 

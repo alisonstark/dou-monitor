@@ -1,100 +1,100 @@
-# Scheduling (Cron or systemd)
+# Agendamento (Cron ou systemd)
 
-This project includes a scheduler-friendly runner at `src/cli/scheduled_run.py`.
+Este projeto inclui um executor amigável para agendamento em `src/cli/scheduled_run.py`.
 
-It runs `src/main.py`, parses this line from output:
+Ele executa `src/main.py`, analisa esta linha da saída:
 
-`Total abertura concursos (keywords: abertura, inicio, iniciado): <number>`
+`Total abertura concursos (keywords: abertura, inicio, iniciado): <número>`
 
-If `<number> >= threshold` (default `1`), it sends a notification.
+Se `<número> >= threshold` (padrão `1`), ele envia uma notificação.
 
-Notification priority:
-1. SMTP email (`DOU_SMTP_*` + `DOU_NOTIFY_*`)
+Prioridade de notificação:
+1. Email SMTP (`DOU_SMTP_*` + `DOU_NOTIFY_*`)
 2. Webhook (`DOU_WEBHOOK_URL`)
-3. Desktop notification (`notify-send`)
+3. Notificação desktop (`notify-send`)
 
 ---
 
-## 1) Manual test
+## 1) Teste manual
 
-From project root:
+Da raiz do projeto:
 
-```bash
+\`\`\`bash
 python src/cli/scheduled_run.py --days 7 --threshold 1 --save-output logs/weekly_run.log
-```
+\`\`\`
 
 ---
 
-## 2) Email configuration (recommended)
+## 2) Configuração de email (recomendado)
 
-Export these variables in your shell profile or scheduler environment:
+Exporte estas variáveis no perfil do seu shell ou ambiente do agendador:
 
-```bash
+\`\`\`bash
 export DOU_SMTP_HOST="smtp.gmail.com"
 export DOU_SMTP_PORT="587"
-export DOU_SMTP_USER="you@example.com"
-export DOU_SMTP_PASS="your_app_password"
-export DOU_NOTIFY_FROM="you@example.com"
-export DOU_NOTIFY_TO="you@example.com"
-```
+export DOU_SMTP_USER="voce@example.com"
+export DOU_SMTP_PASS="sua_senha_de_app"
+export DOU_NOTIFY_FROM="voce@example.com"
+export DOU_NOTIFY_TO="voce@example.com"
+\`\`\`
 
-Notes:
-- For Gmail, use an App Password (not your normal login password).
-- If SMTP variables are missing, the script falls back to webhook or desktop notifications.
+Observações:
+- Para Gmail, use uma Senha de App (não sua senha de login normal).
+- Se as variáveis SMTP estiverem faltando, o script volta para webhook ou notificações desktop.
 
 ---
 
-## 3) Weekly cron job (every 7 days)
+## 3) Tarefa cron semanal (a cada 7 dias)
 
-Edit your crontab:
+Edite seu crontab:
 
-```bash
+\`\`\`bash
 crontab -e
-```
+\`\`\`
 
-Add this line (runs every Monday at 08:00):
+Adicione esta linha (executa toda segunda-feira às 08:00):
 
-```cron
-0 8 * * 1 cd /home/moonpie/Documents/GitProjects/dou-monitor && /usr/bin/env DOU_SMTP_HOST="smtp.gmail.com" DOU_SMTP_PORT="587" DOU_SMTP_USER="you@example.com" DOU_SMTP_PASS="your_app_password" DOU_NOTIFY_FROM="you@example.com" DOU_NOTIFY_TO="you@example.com" python src/cli/scheduled_run.py --days 7 --threshold 1 --save-output logs/cron_weekly.log >> logs/cron.log 2>&1
-```
+\`\`\`cron
+0 8 * * 1 cd /home/moonpie/Documents/GitProjects/dou-monitor && /usr/bin/env DOU_SMTP_HOST="smtp.gmail.com" DOU_SMTP_PORT="587" DOU_SMTP_USER="voce@example.com" DOU_SMTP_PASS="sua_senha_de_app" DOU_NOTIFY_FROM="voce@example.com" DOU_NOTIFY_TO="voce@example.com" python src/cli/scheduled_run.py --days 7 --threshold 1 --save-output logs/cron_weekly.log >> logs/cron.log 2>&1
+\`\`\`
 
-If you use a virtualenv, replace `python` with your venv interpreter (example):
+Se você usa um virtualenv, substitua `python` pelo interpretador do seu venv (exemplo):
 
-```cron
+\`\`\`cron
 0 8 * * 1 cd /home/moonpie/Documents/GitProjects/dou-monitor && /home/moonpie/Documents/GitProjects/dou-monitor/.venv/bin/python src/cli/scheduled_run.py --days 7 --threshold 1 --save-output logs/cron_weekly.log >> logs/cron.log 2>&1
-```
+\`\`\`
 
 ---
 
-## 4) Weekly systemd timer (recommended over cron)
+## 4) Timer systemd semanal (recomendado em vez de cron)
 
-Create user service:
+Crie o serviço de usuário:
 
 `~/.config/systemd/user/dou-monitor.service`
 
-```ini
+\`\`\`ini
 [Unit]
-Description=Run DOU monitor weekly
+Description=Executar monitor DOU semanalmente
 
 [Service]
 Type=oneshot
 WorkingDirectory=/home/moonpie/Documents/GitProjects/dou-monitor
 Environment=DOU_SMTP_HOST=smtp.gmail.com
 Environment=DOU_SMTP_PORT=587
-Environment=DOU_SMTP_USER=you@example.com
-Environment=DOU_SMTP_PASS=your_app_password
-Environment=DOU_NOTIFY_FROM=you@example.com
-Environment=DOU_NOTIFY_TO=you@example.com
+Environment=DOU_SMTP_USER=voce@example.com
+Environment=DOU_SMTP_PASS=sua_senha_de_app
+Environment=DOU_NOTIFY_FROM=voce@example.com
+Environment=DOU_NOTIFY_TO=voce@example.com
 ExecStart=/home/moonpie/Documents/GitProjects/dou-monitor/.venv/bin/python /home/moonpie/Documents/GitProjects/dou-monitor/src/cli/scheduled_run.py --days 7 --threshold 1 --save-output /home/moonpie/Documents/GitProjects/dou-monitor/logs/systemd_weekly.log
-```
+\`\`\`
 
-Create timer:
+Crie o timer:
 
 `~/.config/systemd/user/dou-monitor.timer`
 
-```ini
+\`\`\`ini
 [Unit]
-Description=Run DOU monitor every 7 days
+Description=Executar monitor DOU a cada 7 dias
 
 [Timer]
 OnBootSec=10min
@@ -104,33 +104,34 @@ Unit=dou-monitor.service
 
 [Install]
 WantedBy=timers.target
-```
+\`\`\`
 
-Enable and start:
+Habilite e inicie:
 
-```bash
+\`\`\`bash
 systemctl --user daemon-reload
 systemctl --user enable --now dou-monitor.timer
 systemctl --user list-timers | grep dou-monitor
-```
+\`\`\`
 
-Test the service immediately (debugging/testing):
+Teste o serviço imediatamente (depuração/teste):
 
-```bash
+\`\`\`bash
 systemctl --user start dou-monitor.service
 systemctl --user status dou-monitor.service
-```
+\`\`\`
 
-Inspect logs:
+Inspecione logs:
 
-```bash
+\`\`\`bash
 journalctl --user -u dou-monitor.service -n 100 --no-pager
-```
+\`\`\`
 
 ---
 
-## 5) Alternative notifications
+## 5) Notificações alternativas
 
-- Webhook: set `DOU_WEBHOOK_URL` (Slack/Discord/custom endpoint that accepts plain text).
-- Desktop: install `notify-send` (package `libnotify-bin` on Debian/Ubuntu).
-- Existing services (Gotify, ntfy, Pushover, Telegram bot) can be integrated via webhook endpoint.
+- Webhook: defina `DOU_WEBHOOK_URL` (Slack/Discord/endpoint personalizado que aceita texto plano).
+- Desktop: instale `notify-send` (pacote `libnotify-bin` no Debian/Ubuntu).
+- Serviços existentes (Gotify, ntfy, Pushover, bot do Telegram) podem ser integrados via endpoint webhook.
+
