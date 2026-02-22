@@ -36,11 +36,11 @@ Monitorar publicações do DOU (Diário Oficial da União) para resultados relac
 
 Execute o script principal da raiz do projeto:
 
-\`\`\`bash
+```bash
 python src/main.py            # modo visualização (mostra todos os concursos encontrados + correspondências de abertura)
 python src/main.py -d 14      # visualizar últimos 14 dias
 python src/main.py -d 30 --export-pdf  # exportar PDFs e extrair JSON dos últimos 30 dias
-\`\`\`
+```
 
 ### Opções de CLI
 - `--export-pdf`: Salvar PDFs de qualidade de impressão e extrair resumos JSON (requer Playwright)
@@ -79,9 +79,9 @@ O parser de cronograma usa extração semântica de datas com normalização de 
 
 **1. Gerar CSV de revisão:**
 
-\`\`\`bash
+```bash
 python src/review_cli.py --summaries-dir data/summaries
-\`\`\`
+```
 
 Isso grava `data/review_<timestamp>.csv` listando cada resumo com pontuações de confiança e problemas sinalizados.
 
@@ -89,15 +89,15 @@ Isso grava `data/review_<timestamp>.csv` listando cada resumo com pontuações d
 
 Após editar o CSV, aplique correções de volta aos resumos JSON (dry-run por padrão):
 
-\`\`\`bash
+```bash
 python src/apply_review.py --csv data/review_YYYYMMDDTHHMMSSZ.csv
-\`\`\`
+```
 
 Para realmente gravar mudanças e criar backups, use `--apply` e defina o nome do revisor:
 
-\`\`\`bash
+```bash
 python src/apply_review.py --csv data/review_YYYYMMDDTHHMMSSZ.csv --apply --reviewer "SeuNome"
-\`\`\`
+```
 
 Isso cria:
 - Arquivos JSON atualizados em `data/summaries/`
@@ -108,9 +108,9 @@ Isso cria:
 
 Após aplicar correções, atualize as whitelists de extração para melhorar execuções futuras:
 
-\`\`\`bash
+```bash
 python src/update_whitelist.py --threshold 1 --apply
-\`\`\`
+```
 
 Isso:
 - Analisa todos os exemplos revisados em `data/reviewed_examples/`
@@ -126,19 +126,18 @@ Isso:
 - Se NENHUM cargo/banca encontrado por padrões primários → busca PDF por itens da whitelist
 - **Isso significa que correções hoje melhoram a extração amanhã automaticamente**
 
-O sistema é **auto-melhorador**: correções manuais reduzem progressivamente a necessidade de intervenção manual futura. A correspondência de whitelist é totalmente case-insensitive e funciona com qualquer variação ("PROFESSOR", "Professor", "professor").
+O sistema é **auto-melhorador**: correções manuais reduzem progressivamente a necessidade de intervenção manual futura. A correspondência de whitelist é totalmente case-insensitive e funciona com qualquer variação ("PROFESSOR", "Professor", "professor", para tomar um exemplo de cargo).
 
 **Visualizar adições propostas sem aplicar:**
-
-\`\`\`bash
+```bash
 python src/update_whitelist.py --threshold 1
-\`\`\`
+```
 
 ### Arquitetura do Projeto
 
 O código é organizado em pacotes focados para melhor manutenibilidade e separação de responsabilidades:
 
-\`\`\`
+```
 src/
 ├── main.py                     # Ponto de entrada da aplicação e orquestração
 ├── extraction/                 # Pipeline de extração de PDF
@@ -153,7 +152,7 @@ src/
 └── cli/                       # Interfaces voltadas ao usuário
     ├── review_cli.py          # CLI de fluxo de trabalho de revisão
     └── scheduled_run.py       # Runner para execução agendada com notificações
-\`\`\`
+```
 
 **Responsabilidades dos pacotes:**
 - **extraction**: Raspa DOU, extrai dados estruturados de PDFs
@@ -176,13 +175,13 @@ Dependências (recomendadas)
 - `playwright` — exportação de PDF (pacote Python) e motores de navegador
 
 Instalação
-\`\`\`bash
+```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 \# instalar motores de navegador Playwright
 python -m playwright install
-\`\`\`
+```
 
 Guia de depuração para desenvolvedores
 - Um passo a passo está disponível em `docs/debugger_walkthrough.md` (ignorado pelo Git por padrão). Explica o fluxo do pipeline, funções principais para inspecionar e verificações interativas rápidas para problemas comuns.
@@ -198,25 +197,25 @@ Guia de agendamento e automação
 ## Resumo de Início Rápido
 
 1. **Fazer scraping e extrair:**
-   \`\`\`bash
+   ```bash
    python src/main.py -d 30 --export-pdf
    \`\`\`
 
 2. **Revisar extrações:**
-   \`\`\`bash
+  ```bash
    python src/review_cli.py --summaries-dir data/summaries
    \# Edite o arquivo CSV gerado
-   \`\`\`
+  ```
 
 3. **Aplicar correções:**
-   \`\`\`bash
+   ```bash
    python src/apply_review.py --csv data/review_*.csv --apply --reviewer "SeuNome"
-   \`\`\`
+   ```
 
 4. **Atualizar whitelists:**
-   \`\`\`bash
+   ```bash
    python src/update_whitelist.py --threshold 1 --apply
-   \`\`\`
+   ```
 
 5. **Próxima raspagem:** Correções dos passos 3-4 melhoram automaticamente a extração!
 
