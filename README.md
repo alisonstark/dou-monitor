@@ -139,8 +139,8 @@ O código é organizado em pacotes focados para melhor manutenibilidade e separa
 
 ```
 src/
-├── main.py                     # Ponto de entrada da aplicação e orquestração
-├── extraction/                 # Pipeline de extração de PDF
+├── main.py                    # Ponto de entrada da aplicação e orquestração
+├── extraction/                # Pipeline de extração de PDF
 │   ├── scraper.py             # Scraping web do DOU
 │   ├── extractor.py           # Extração de metadata de PDF
 │   └── cronograma_parser.py   # Extração de datas/cronograma
@@ -179,7 +179,7 @@ Instalação
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-\# instalar motores de navegador Playwright
+# instalar motores de navegador Playwright
 python -m playwright install
 ```
 
@@ -199,12 +199,12 @@ Guia de agendamento e automação
 1. **Fazer scraping e extrair:**
    ```bash
    python src/main.py -d 30 --export-pdf
-   \`\`\`
+   ```
 
 2. **Revisar extrações:**
   ```bash
    python src/review_cli.py --summaries-dir data/summaries
-   \# Edite o arquivo CSV gerado
+   # Edite o arquivo CSV gerado
   ```
 
 3. **Aplicar correções:**
