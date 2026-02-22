@@ -180,7 +180,7 @@ Instalação
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-# instalar motores de navegador Playwright
+\# instalar motores de navegador Playwright
 python -m playwright install
 \`\`\`
 
@@ -197,7 +197,7 @@ Guia de agendamento e automação
 
 ## Resumo de Início Rápido
 
-1. **Raspar e extrair:**
+1. **Fazer scraping e extrair:**
    \`\`\`bash
    python src/main.py -d 30 --export-pdf
    \`\`\`
@@ -205,7 +205,7 @@ Guia de agendamento e automação
 2. **Revisar extrações:**
    \`\`\`bash
    python src/review_cli.py --summaries-dir data/summaries
-   # Edite o arquivo CSV gerado
+   \# Edite o arquivo CSV gerado
    \`\`\`
 
 3. **Aplicar correções:**
