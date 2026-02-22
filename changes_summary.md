@@ -41,13 +41,13 @@
 **Problema:** Todos os módulos no diretório `src/` plano dificultavam entender responsabilidades.
 
 **Solução:** Reorganizado em pacotes focados:
-\`\`\`
+```
 src/
 ├── extraction/        # Scraping de PDF, parsing, extração de datas
 ├── processing/        # Aplicação de revisões, atualização de whitelists
 ├── export/           # Geração de saídas (PDFs, JSON)
 └── cli/              # Interfaces de linha de comando
-\`\`\`
+```
 
 **Benefícios:**
 - Separação clara de responsabilidades
