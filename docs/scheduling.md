@@ -19,9 +19,9 @@ Prioridade de notificação:
 
 Da raiz do projeto:
 
-\`\`\`bash
+```bash
 python src/cli/scheduled_run.py --days 7 --threshold 1 --save-output logs/weekly_run.log
-\`\`\`
+```
 
 ---
 
@@ -29,14 +29,14 @@ python src/cli/scheduled_run.py --days 7 --threshold 1 --save-output logs/weekly
 
 Exporte estas variáveis no perfil do seu shell ou ambiente do agendador:
 
-\`\`\`bash
+```bash
 export DOU_SMTP_HOST="smtp.gmail.com"
 export DOU_SMTP_PORT="587"
 export DOU_SMTP_USER="voce@example.com"
 export DOU_SMTP_PASS="sua_senha_de_app"
 export DOU_NOTIFY_FROM="voce@example.com"
 export DOU_NOTIFY_TO="voce@example.com"
-\`\`\`
+```
 
 Observações:
 - Para Gmail, use uma Senha de App (não sua senha de login normal).
@@ -48,21 +48,21 @@ Observações:
 
 Edite seu crontab:
 
-\`\`\`bash
+```bash
 crontab -e
-\`\`\`
+```
 
 Adicione esta linha (executa toda segunda-feira às 08:00):
 
-\`\`\`cron
+```cron
 0 8 * * 1 cd /home/moonpie/Documents/GitProjects/dou-monitor && /usr/bin/env DOU_SMTP_HOST="smtp.gmail.com" DOU_SMTP_PORT="587" DOU_SMTP_USER="voce@example.com" DOU_SMTP_PASS="sua_senha_de_app" DOU_NOTIFY_FROM="voce@example.com" DOU_NOTIFY_TO="voce@example.com" python src/cli/scheduled_run.py --days 7 --threshold 1 --save-output logs/cron_weekly.log >> logs/cron.log 2>&1
-\`\`\`
+```
 
 Se você usa um virtualenv, substitua `python` pelo interpretador do seu venv (exemplo):
 
-\`\`\`cron
+```cron
 0 8 * * 1 cd /home/moonpie/Documents/GitProjects/dou-monitor && /home/moonpie/Documents/GitProjects/dou-monitor/.venv/bin/python src/cli/scheduled_run.py --days 7 --threshold 1 --save-output logs/cron_weekly.log >> logs/cron.log 2>&1
-\`\`\`
+```
 
 ---
 
@@ -72,7 +72,7 @@ Crie o serviço de usuário:
 
 `~/.config/systemd/user/dou-monitor.service`
 
-\`\`\`ini
+```ini
 [Unit]
 Description=Executar monitor DOU semanalmente
 
@@ -86,13 +86,13 @@ Environment=DOU_SMTP_PASS=sua_senha_de_app
 Environment=DOU_NOTIFY_FROM=voce@example.com
 Environment=DOU_NOTIFY_TO=voce@example.com
 ExecStart=/home/moonpie/Documents/GitProjects/dou-monitor/.venv/bin/python /home/moonpie/Documents/GitProjects/dou-monitor/src/cli/scheduled_run.py --days 7 --threshold 1 --save-output /home/moonpie/Documents/GitProjects/dou-monitor/logs/systemd_weekly.log
-\`\`\`
+```
 
 Crie o timer:
 
 `~/.config/systemd/user/dou-monitor.timer`
 
-\`\`\`ini
+```ini
 [Unit]
 Description=Executar monitor DOU a cada 7 dias
 
@@ -104,28 +104,28 @@ Unit=dou-monitor.service
 
 [Install]
 WantedBy=timers.target
-\`\`\`
+```
 
 Habilite e inicie:
 
-\`\`\`bash
+```bash
 systemctl --user daemon-reload
 systemctl --user enable --now dou-monitor.timer
 systemctl --user list-timers | grep dou-monitor
-\`\`\`
+```
 
 Teste o serviço imediatamente (depuração/teste):
 
-\`\`\`bash
+```bash
 systemctl --user start dou-monitor.service
 systemctl --user status dou-monitor.service
-\`\`\`
+```
 
 Inspecione logs:
 
-\`\`\`bash
+```bash
 journalctl --user -u dou-monitor.service -n 100 --no-pager
-\`\`\`
+```
 
 ---
 

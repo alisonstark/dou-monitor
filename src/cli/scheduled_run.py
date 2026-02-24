@@ -16,7 +16,7 @@ COUNT_PATTERN = re.compile(r"Total abertura concursos \(keywords: .*?\):\s*(\d+)
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run DOU monitor and notify when abertura concursos count reaches threshold."
+        description="Run Doumon and notify when abertura concursos count reaches threshold."
     )
     parser.add_argument("--days", "-d", type=int, default=7, help="Lookback window in days")
     parser.add_argument(
@@ -135,7 +135,7 @@ def main() -> int:
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     if return_code != 0:
-        subject = "[DOU Monitor] Execution failed"
+        subject = "[Doumon] Execution failed"
         body = f"Run at: {now}\nExit code: {return_code}\n\nOutput:\n{output[-5000:]}"
         notified = send_email(subject, body) or send_webhook(subject, body) or send_desktop(subject, body)
         print(output)
@@ -145,14 +145,14 @@ def main() -> int:
     print(output)
 
     if count is None:
-        subject = "[DOU Monitor] Could not parse abertura count"
+        subject = "[Doumon] Could not parse abertura count"
         body = f"Run at: {now}\n\nOutput snippet:\n{output[-5000:]}"
         notified = send_email(subject, body) or send_webhook(subject, body) or send_desktop(subject, body)
         print("Parse warning notification sent." if notified else "Could not parse count and no notifier was configured.")
         return 0
 
     if count >= args.threshold:
-        subject = f"[DOU Monitor] {count} abertura concurso(s) found"
+        subject = f"[Doumon] {count} abertura concurso(s) found"
         body = (
             f"Run at: {now}\n"
             f"Threshold: {args.threshold}\n"

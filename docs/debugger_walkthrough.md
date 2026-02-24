@@ -1,4 +1,4 @@
-# DOU-monitor — Passo a Passo para Depuração (educacional)
+# Doumon — Passo a Passo para Depuração (educacional)
 
 Propósito: Este documento guia você através de uma execução fictícia da ferramenta e explica, passo a passo, quais componentes são executados, o que esperar em cada etapa e quais funções inspecionar durante a depuração. É intencionalmente pragmático e aponta para as funções principais/secundárias usadas.
 

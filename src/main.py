@@ -8,7 +8,7 @@ import unicodedata
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Monitor DOU concursos")
+    parser = argparse.ArgumentParser(description="Doumon - Monitor de concursos DOU")
     parser.add_argument(
         "--export-pdf",
         action="store_true",
