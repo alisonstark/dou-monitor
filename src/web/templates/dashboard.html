@@ -11,7 +11,7 @@
     <div style="display: flex; justify-content: space-between; align-items: center; max-width: 1200px; margin: 0 auto;">
       <div style="flex: 1; text-align: center;">
         <h1>Doumon Dashboard</h1>
-        <p>Visualizacao de concursos e gerenciamento de filtros/notificacoes</p>
+        <p>Visualização de concursos e gerenciamento de filtros/notificações</p>
       </div>
       <div style="position: absolute; right: 2rem; top: 2rem;">
         <a href="{{ url_for('logout') }}" style="display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.6rem 1.2rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; border-radius: 8px; font-size: 0.9rem; font-weight: 600; transition: transform 0.2s, box-shadow 0.2s;" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 5px 20px rgba(102, 126, 234, 0.4)'" onmouseout="this.style.transform=''; this.style.boxShadow=''">
@@ -100,7 +100,7 @@
 
     {% if edit_record %}
     <section class="panel review-panel">
-      <h2>Revisao Manual (MIT) - Concursos Abertos</h2>
+      <h2>Revisão Manual (MIT) - Concursos Abertos</h2>
       <p class="hint">
         <small>Corrija campos inconsistentes e salve. O backend atualiza o JSON, cria backup e registra exemplo revisado para aprendizagem incremental.</small>
       </p>
@@ -112,7 +112,7 @@
         <label>Arquivo
           <input type="text" value="{{ edit_record.file_name }}" disabled />
         </label>
-        <label>Orgao
+        <label>Órgão
           <input type="text" name="orgao" value="{{ edit_record.orgao }}" />
         </label>
         <label>Edital
@@ -124,20 +124,20 @@
         <label>Banca
           <input type="text" name="banca" value="{{ edit_record.banca }}" />
         </label>
-        <label>Vagas Total
+        <label>Vagas Totais
           <input type="number" min="0" step="1" name="vagas_total" value="{{ edit_record.vagas_total if edit_record.vagas_total is not none else '' }}" />
         </label>
-        <label>Taxa Inscricao
+        <label>Taxa de Inscrição
           <input type="text" name="taxa_inscricao" value="{{ edit_record.taxa_inscricao }}" />
         </label>
-        <label>Data Prova
+        <label>Data da Prova
           <input type="date" name="data_prova" value="{{ edit_record.data_prova }}" />
         </label>
         <label>Revisor
           <input type="text" name="reviewer" value="dashboard-user" />
         </label>
         <div class="actions">
-          <button type="submit" class="primary">Salvar Correcao Manual</button>
+          <button type="submit" class="primary">Salvar Correção Manual</button>
           <a href="{{ cancel_edit_url }}" class="ghost">Cancelar</a>
         </div>
       </form>
@@ -150,9 +150,9 @@
         <input type="hidden" name="sort_by" value="{{ sort_by }}" />
         <input type="hidden" name="sort_dir" value="{{ sort_dir }}" />
         <label>Busca Livre
-          <input type="text" name="q" value="{{ filters.q }}" placeholder="orgao, cargo, banca, edital" />
+          <input type="text" name="q" value="{{ filters.q }}" placeholder="órgão, cargo, banca, edital" />
         </label>
-        <label>Orgao
+        <label>Órgão
           <input type="text" name="orgao" value="{{ filters.orgao }}" />
         </label>
         <label>Cargo
@@ -161,10 +161,10 @@
         <label>Banca
           <input type="text" name="banca" value="{{ filters.banca }}" />
         </label>
-        <label>Data Inscricao: Ate
+        <label>Data de Inscrição: Até
           <input type="date" name="inscricao_to" value="{{ filters.inscricao_to }}" />
         </label>
-        <label>Itens por pagina
+        <label>Itens por página
           <select name="page_size">
             {% for size in [10, 20, 50] %}
               <option value="{{ size }}" {% if page_meta.page_size == size %}selected{% endif %}>{{ size }}</option>
@@ -183,10 +183,10 @@
       <h3>Filtros Persistentes</h3>
       <form method="post" action="{{ url_for('save_filters') }}" class="grid-form">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-        <label>Keywords monitoradas (separadas por virgula)
+        <label>Palavras-chave monitoradas (separadas por vírgula)
           <input type="text" name="keywords" value="{{ config.filters.keywords | join(', ') }}" />
         </label>
-        <label>Janela padrao de dias
+        <label>Janela padrão de dias
           <input type="number" min="1" step="1" name="default_days" value="{{ config.filters.default_days }}" />
         </label>
         <div class="actions">
@@ -208,7 +208,7 @@
         </label>
         <label class="check">
           <input type="checkbox" name="desktop_enabled" {% if config.notifications.desktop_enabled %}checked{% endif %} />
-          Habilitar notificacao desktop
+          Habilitar notificação desktop
         </label>
         <div class="actions">
           <button type="submit">Salvar Notificações</button>
@@ -217,7 +217,7 @@
       
       <h3 style="margin-top: 1.5rem;">Busca Manual Customizada</h3>
       <p style="color: var(--muted); margin-bottom: 1rem;">
-        <small>💡 Use o botão "Atualizar Dados" no topo para busca rápida com configurações padrão.</small>
+        <small>💡 Use o botão "Atualizar Dados" no topo para uma busca rápida com configurações padrão.</small>
       </p>
       <form method="post" action="{{ url_for('run_manual') }}" class="grid-form" autocomplete="off">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
@@ -241,14 +241,14 @@
     <section class="panel table-panel">
       <h2>Concursos Abertos ({{ metrics.abertura_count }})</h2>
       <div class="pager-head">
-        <span>Pagina {{ page_meta.page }} de {{ page_meta.total_pages }}</span>
+        <span>Página {{ page_meta.page }} de {{ page_meta.total_pages }}</span>
         <a class="ghost api-link" href="{{ api_url }}" target="_blank" rel="noopener">Ver API JSON</a>
       </div>
       <div class="table-scroll">
         <table>
           <thead>
             <tr>
-              <th><a href="{{ url_with_updates(sort_by='orgao', sort_dir='asc' if sort_by != 'orgao' or sort_dir == 'desc' else 'desc', page=1) }}">Orgao</a></th>
+              <th><a href="{{ url_with_updates(sort_by='orgao', sort_dir='asc' if sort_by != 'orgao' or sort_dir == 'desc' else 'desc', page=1) }}">Órgão</a></th>
               <th><a href="{{ url_with_updates(sort_by='cargo', sort_dir='asc' if sort_by != 'cargo' or sort_dir == 'desc' else 'desc', page=1) }}">Cargo</a></th>
               <th><a href="{{ url_with_updates(sort_by='banca', sort_dir='asc' if sort_by != 'banca' or sort_dir == 'desc' else 'desc', page=1) }}">Banca</a></th>
               <th><a href="{{ url_with_updates(sort_by='edital_numero', sort_dir='asc' if sort_by != 'edital_numero' or sort_dir == 'desc' else 'desc', page=1) }}">Edital</a></th>
@@ -315,7 +315,7 @@
           <a class="ghost" href="{{ url_with_updates(page=page_meta.page - 1) }}">Anterior</a>
         {% endif %}
         {% if page_meta.has_next %}
-          <a class="ghost" href="{{ url_with_updates(page=page_meta.page + 1) }}">Proxima</a>
+          <a class="ghost" href="{{ url_with_updates(page=page_meta.page + 1) }}">Próxima</a>
         {% endif %}
       </nav>
     </section>
@@ -323,8 +323,8 @@
     <section class="panel table-panel">
       <h2>Outros Editais e Concursos ({{ metrics.outros_count }})</h2>
       <p class="hint">
-        <small>Editais que contem "concurso" ou "edital" mas nao foram identificados como aberturas.</small><br/>
-        <small>Mostrando apenas itens em cache dentro da janela de {{ outros_window_info.requested_days }} dia(s) configurada em "Configuracoes Avancadas".</small>
+        <small>Editais que contêm "concurso" ou "edital", mas não foram identificados como aberturas.</small><br/>
+        <small>Mostrando apenas itens em cache dentro da janela de {{ outros_window_info.requested_days }} dia(s) configurada em "Configurações Avançadas".</small>
         {% if outros_window_info.has_gap %}
           <br/><small class="stale-warning">⚠️ O cache cobre cerca de {{ outros_window_info.available_days }} dia(s). Para atingir {{ outros_window_info.requested_days }} dia(s), <a href="#update-status-panel">rode "Atualizar Dados do DOU"</a>.</small>
         {% endif %}
@@ -333,7 +333,7 @@
         <table>
           <thead>
             <tr>
-              <th>Orgao</th>
+              <th>Órgão</th>
               <th>Cargo</th>
               <th>Banca</th>
               <th>Edital</th>

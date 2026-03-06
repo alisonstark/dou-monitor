@@ -17,6 +17,26 @@ def _login_test_user(client, app):
 
 
 class TestWebApp(unittest.TestCase):
+    def test_forgot_password_route(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            summaries_dir = root / "summaries"
+            summaries_dir.mkdir(parents=True, exist_ok=True)
+            config_path = root / "dashboard_config.json"
+
+            app = create_app(summaries_dir=summaries_dir, config_path=config_path)
+            app.config["TESTING"] = True
+            app.config["WTF_CSRF_ENABLED"] = False
+            client = app.test_client()
+
+            page = client.get("/forgot-password")
+            self.assertEqual(page.status_code, 200)
+            self.assertIn("Recuperar Senha", page.get_data(as_text=True))
+
+            post = client.post("/forgot-password", data={"email": "teste@example.com"}, follow_redirects=True)
+            self.assertEqual(post.status_code, 200)
+            self.assertIn("Se o email estiver cadastrado", post.get_data(as_text=True))
+
     def test_dashboard_and_api(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -104,7 +124,7 @@ class TestWebApp(unittest.TestCase):
 
             html_resp = client.get(f"/?edit={file_name}")
             self.assertEqual(html_resp.status_code, 200)
-            self.assertIn("Revisao Manual (MIT)", html_resp.get_data(as_text=True))
+            self.assertIn("Revisão Manual (MIT)", html_resp.get_data(as_text=True))
 
             post_resp = client.post(
                 "/review/manual",

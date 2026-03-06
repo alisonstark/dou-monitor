@@ -19,7 +19,7 @@ from .auth import login_manager, verify_credentials, User
 from .security import validate_filename, validate_email, is_safe_url
 from .dashboard_service import (
     apply_manual_review,
-    categorize_concursos,
+    categorize_notices,
     filter_summaries,
     filter_records_by_cache_window,
     get_cache_coverage_info,
@@ -263,6 +263,21 @@ def create_app(summaries_dir: Path | None = None, config_path: Path | None = Non
                     flash("Usuário ou senha inválidos", "error")
         
         return _render_login()
+
+    @app.route("/forgot-password", methods=["GET", "POST"])
+    def forgot_password():
+        """Password recovery placeholder route (email flow to be implemented)."""
+        if request.method == "POST":
+            email = request.form.get("email", "").strip()
+            app.logger.info(f"Password recovery placeholder requested: email={email or '<empty>'} ip={request.remote_addr}")
+            flash(
+                "Se o email estiver cadastrado, você receberá instruções para redefinir a senha. "
+                "(Placeholder: envio de email ainda não implementado)",
+                "success",
+            )
+            return redirect(url_for("forgot_password"))
+
+        return render_template("forgot_password.html")
     
     @app.route("/logout")
     @login_required
@@ -319,7 +334,7 @@ def create_app(summaries_dir: Path | None = None, config_path: Path | None = Non
         filtered = filter_summaries(records, filters)
         
         # Categorize into abertura and outros
-        categorized = categorize_concursos(filtered)
+        categorized = categorize_notices(filtered)
         abertura_records = categorized["abertura"]
         outros_records = categorized["outros"]
         outros_window_days = config.get("filters", {}).get("default_days", 7)
@@ -349,7 +364,7 @@ def create_app(summaries_dir: Path | None = None, config_path: Path | None = Non
         # Get last update time
         last_update = get_last_update_time(active_summaries_dir)
         
-        api_url = url_for("concursos_api", **request.args.to_dict(flat=True))
+        api_url = url_for("notices_api", **request.args.to_dict(flat=True))
 
         return render_template(
             "dashboard.html",
@@ -369,9 +384,10 @@ def create_app(summaries_dir: Path | None = None, config_path: Path | None = Non
             cancel_edit_url=cancel_edit_url,
         )
 
+    @app.get("/api/notices")
     @app.get("/api/concursos")
     @login_required
-    def concursos_api():
+    def notices_api():
         records = load_summaries(active_summaries_dir)
         filters = {
             "q": request.args.get("q", ""),
@@ -412,7 +428,7 @@ def create_app(summaries_dir: Path | None = None, config_path: Path | None = Non
         config["filters"]["keywords"] = keywords or config["filters"].get("keywords", [])
         config["filters"]["default_days"] = default_days
         save_dashboard_config(active_config_path, config)
-        flash("Configuracoes de filtros salvas.", "success")
+        flash("Configurações de filtros salvas.", "success")
         return redirect(url_for("index"))
 
     @app.post("/settings/notifications")
@@ -448,7 +464,7 @@ def create_app(summaries_dir: Path | None = None, config_path: Path | None = Non
         config["notifications"]["desktop_enabled"] = desktop_enabled
 
         save_dashboard_config(active_config_path, config)
-        flash("Configuracoes de notificacao salvas.", "success")
+        flash("Configurações de notificação salvas.", "success")
         return redirect(url_for("index"))
 
     @app.post("/run/manual")

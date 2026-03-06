@@ -177,7 +177,7 @@ def get_last_update_time(summaries_dir: Path) -> Dict[str, Any]:
     }
 
 
-def categorize_concursos(records: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+def categorize_notices(records: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
     """
     Categorize concursos into 'abertura' (opening) and 'outros' (others).
     
@@ -212,6 +212,11 @@ def categorize_concursos(records: List[Dict[str, Any]]) -> Dict[str, List[Dict[s
         "abertura": abertura,
         "outros": outros,
     }
+
+
+# Backward-compatible alias during naming migration.
+def categorize_concursos(records: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+    return categorize_notices(records)
 
 
 def _contains(value: str, expected: str) -> bool:
