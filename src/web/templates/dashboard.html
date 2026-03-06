@@ -31,6 +31,14 @@
           <strong>{{ metrics.total }}</strong>
         </article>
         <article>
+          <span>Concursos Abertos</span>
+          <strong>{{ metrics.abertura_count }}</strong>
+        </article>
+        <article>
+          <span>Outros Editais</span>
+          <strong>{{ metrics.outros_count }}</strong>
+        </article>
+        <article>
           <span>Com Data de Prova</span>
           <strong>{{ metrics.with_prova }}</strong>
         </article>
@@ -139,7 +147,7 @@
     </section>
 
     <section class="panel table-panel">
-      <h2>Concursos ({{ page_meta.total }})</h2>
+      <h2>Concursos Abertos ({{ metrics.abertura_count }})</h2>
       <div class="pager-head">
         <span>Pagina {{ page_meta.page }} de {{ page_meta.total_pages }}</span>
         <a class="ghost api-link" href="{{ api_url }}" target="_blank" rel="noopener">Ver API JSON</a>
@@ -156,6 +164,7 @@
               <th><a href="{{ url_with_updates(sort_by='vagas_total', sort_dir='asc' if sort_by != 'vagas_total' or sort_dir == 'desc' else 'desc', page=1) }}">Vagas</a></th>
               <th>Taxa</th>
               <th>Arquivo</th>
+              <th>Baixar Edital</th>
             </tr>
           </thead>
           <tbody>
@@ -169,10 +178,11 @@
                 <td>{{ rec.vagas_total if rec.vagas_total is not none else '-' }}</td>
                 <td>{{ rec.taxa_inscricao or '-' }}</td>
                 <td><code>{{ rec.file_name }}</code></td>
+                <td><a href="/editais/{{ rec.pdf_filename }}" class="ghost" target="_blank" rel="noopener">📄 PDF</a></td>
               </tr>
             {% else %}
               <tr>
-                <td colspan="8" class="empty">Nenhum concurso para os filtros selecionados.</td>
+                <td colspan="9" class="empty">Nenhum concurso aberto para os filtros selecionados.</td>
               </tr>
             {% endfor %}
           </tbody>
@@ -186,6 +196,49 @@
           <a class="ghost" href="{{ url_with_updates(page=page_meta.page + 1) }}">Proxima</a>
         {% endif %}
       </nav>
+    </section>
+
+    <section class="panel table-panel">
+      <h2>Outros Editais e Concursos ({{ metrics.outros_count }})</h2>
+      <p class="hint">
+        <small>Editais que contem "concurso" ou "edital" mas nao foram identificados como aberturas.</small>
+      </p>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Orgao</th>
+              <th>Cargo</th>
+              <th>Banca</th>
+              <th>Edital</th>
+              <th>Prova</th>
+              <th>Vagas</th>
+              <th>Taxa</th>
+              <th>Arquivo</th>
+              <th>Baixar Edital</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for rec in outros_records %}
+              <tr>
+                <td>{{ rec.orgao or '-' }}</td>
+                <td>{{ rec.cargo or '-' }}</td>
+                <td>{{ rec.banca or '-' }}</td>
+                <td>{{ rec.edital_numero or '-' }}</td>
+                <td>{{ rec.data_prova or '-' }}</td>
+                <td>{{ rec.vagas_total if rec.vagas_total is not none else '-' }}</td>
+                <td>{{ rec.taxa_inscricao or '-' }}</td>
+                <td><code>{{ rec.file_name }}</code></td>
+                <td><a href="/editais/{{ rec.pdf_filename }}" class="ghost" target="_blank" rel="noopener">📄 PDF</a></td>
+              </tr>
+            {% else %}
+              <tr>
+                <td colspan="9" class="empty">Nenhum outro edital encontrado.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </section>
   </main>
 </body>

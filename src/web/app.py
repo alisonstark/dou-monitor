@@ -1,8 +1,9 @@
 from pathlib import Path
 
-from flask import Flask, flash, jsonify, redirect, render_template, request, url_for
+from flask import Flask, flash, jsonify, redirect, render_template, request, send_from_directory, url_for
 
 from .dashboard_service import (
+    categorize_concursos,
     filter_summaries,
     load_dashboard_config,
     load_summaries,
@@ -58,10 +59,27 @@ def create_app(summaries_dir: Path | None = None, config_path: Path | None = Non
         page = _parse_positive_int(request.args.get("page", "1"), 1)
         page_size = _parse_positive_int(request.args.get("page_size", "10"), 10)
 
+        # Apply filters first
         filtered = filter_summaries(records, filters)
-        sorted_records = sort_summaries(filtered, sort_by, sort_dir)
-        page_items, page_meta = paginate_summaries(sorted_records, page, page_size)
+        
+        # Categorize into abertura and outros
+        categorized = categorize_concursos(filtered)
+        abertura_records = categorized["abertura"]
+        outros_records = categorized["outros"]
+        
+        # Sort and paginate abertura (main section)
+        sorted_abertura = sort_summaries(abertura_records, sort_by, sort_dir)
+        page_items, page_meta = paginate_summaries(sorted_abertura, page, page_size)
+        
+        # Sort outros (no pagination for now, or show first N)
+        sorted_outros = sort_summaries(outros_records, sort_by, sort_dir)
+        outros_display = sorted_outros[:20]  # Show max 20 outros
+        
+        # Metrics based on filtered results
         metrics = summarize_metrics(filtered)
+        metrics["abertura_count"] = len(abertura_records)
+        metrics["outros_count"] = len(outros_records)
+        
         config = load_dashboard_config(active_config_path)
 
         api_url = url_for("concursos_api", **request.args.to_dict(flat=True))
@@ -69,6 +87,7 @@ def create_app(summaries_dir: Path | None = None, config_path: Path | None = Non
         return render_template(
             "dashboard.html",
             records=page_items,
+            outros_records=outros_display,
             metrics=metrics,
             filters=filters,
             config=config,
@@ -160,6 +179,12 @@ def create_app(summaries_dir: Path | None = None, config_path: Path | None = Non
             flash(f"Erro: {result['error_message']}", "error")
         
         return redirect(url_for("index"))
+
+    @app.get("/editais/<filename>")
+    def serve_edital(filename):
+        """Serve PDF files from the editais/ directory"""
+        editais_dir = BASE_DIR / "editais"
+        return send_from_directory(editais_dir, filename)
 
     return app
 

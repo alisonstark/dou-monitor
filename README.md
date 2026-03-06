@@ -392,6 +392,13 @@ Abra no navegador:
 
 ### Funcionalidades do dashboard
 
+#### Visualização em Duas Seções
+O dashboard organiza os concursos em duas categorias:
+- **Concursos Abertos**: Editais identificados com palavras-chave de abertura (abertura, início, iniciado)
+- **Outros Editais e Concursos**: Demais editais que podem conter informações relevantes mas não foram identificados como aberturas
+
+Cada concurso exibe link direto para **baixar o PDF do edital** diretamente no navegador.
+
 #### Execução Manual
 No painel "Execução Manual", você pode:
 - Iniciar uma busca no DOU com número configurável de dias de retrospecção
@@ -439,6 +446,7 @@ python -m pytest tests/ -v
 - ✅ `test_dashboard_service.py` - Filtros, métricas, ordenação e paginação do dashboard
 - ✅ `test_web_app.py` - Rotas HTML/API do dashboard
 - ✅ `test_scheduled_run.py` - Leitura de notificações via `dashboard_config.json`
+- ✅ `test_categorize.py` - Categorização de concursos abertos vs outros editais
 
 ### Testes Manuais com Dados Reais
 

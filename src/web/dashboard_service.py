@@ -92,6 +92,7 @@ def load_summaries(summaries_dir: Path) -> List[Dict[str, Any]]:
                 {
                     "id": file_path.stem,
                     "file_name": file_path.name,
+                    "pdf_filename": f"{file_path.stem}.pdf",
                     "orgao": _safe_text(metadata.get("orgao")),
                     "edital_numero": _safe_text(metadata.get("edital_numero")),
                     "cargo": _safe_text(metadata.get("cargo")),
@@ -107,6 +108,43 @@ def load_summaries(summaries_dir: Path) -> List[Dict[str, Any]]:
             continue
 
     return records
+
+
+def categorize_concursos(records: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+    """
+    Categorize concursos into 'abertura' (opening) and 'outros' (others).
+    
+    Abertura: contains keywords like 'abertura', 'inicio', 'iniciado' in filename or title
+    Outros: other concursos/editais that don't match abertura keywords
+    """
+    import unicodedata
+    
+    def _normalize(text: str) -> str:
+        """Remove accents and convert to lowercase"""
+        return "".join(
+            c for c in unicodedata.normalize("NFKD", text)
+            if not unicodedata.combining(c)
+        ).lower()
+    
+    abertura_keywords = ["abertura", "inicio", "iniciado"]
+    
+    abertura = []
+    outros = []
+    
+    for rec in records:
+        # Check in filename and orgao field (which often contains the title)
+        text_to_check = f"{rec.get('file_name', '')} {rec.get('orgao', '')}"
+        normalized = _normalize(text_to_check)
+        
+        if any(keyword in normalized for keyword in abertura_keywords):
+            abertura.append(rec)
+        else:
+            outros.append(rec)
+    
+    return {
+        "abertura": abertura,
+        "outros": outros,
+    }
 
 
 def _contains(value: str, expected: str) -> bool:
