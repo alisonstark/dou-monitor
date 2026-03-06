@@ -318,6 +318,7 @@ O código-fonte em `src/` é organizado em pacotes focados para melhor manutenib
 | **processing/** | Aplica correções humanas, aprende via whitelists |
 | **export/** | Gera arquivos de saída (PDFs, JSON) |
 | **cli/** | Interfaces para fluxo humano no circuito e automação |
+| **web/** | Dashboard web para visualização, filtros e configurações |
 
 ### Arquivos e Pastas de Dados
 
@@ -369,6 +370,59 @@ Para configuração detalhada de notificações, exemplos e troubleshooting, con
 
 ---
 
+## 🌐 Dashboard Web
+
+O projeto agora inclui um dashboard web inicial para:
+- Visualizar concursos extraídos de `data/summaries/`
+- Aplicar filtros por órgão, cargo, banca, busca livre e faixa de data de prova
+- Ordenar e paginar os resultados da tabela
+- Gerenciar configurações persistentes de filtros e notificações
+- Expor endpoint JSON para integrações (`/api/concursos`)
+- **Executar monitoramento manual** com um clique (scraping + opcional exportação de PDFs)
+
+### Executar localmente
+
+```bash
+python -m src.web.app
+```
+
+Abra no navegador:
+
+`http://127.0.0.1:5000`
+
+### Funcionalidades do dashboard
+
+#### Execução Manual
+No painel "Execução Manual", você pode:
+- Iniciar uma busca no DOU com número configurável de dias de retrospecção
+- Opcionalmente exportar PDFs e extrair dados automaticamente
+- Ver resultados imediatamente via flash messages (total de concursos, aberturas encontradas, etc.)
+
+#### Filtros e Ordenação
+- Busca livre por texto em qualquer campo
+- Filtros específicos por órgão, cargo, banca
+- Faixa de datas de prova
+- Ordenação por 6 colunas (órgão, cargo, banca, edital, data prova, vagas total)
+- Paginação com tamanho configurável (10/20/50 itens)
+
+#### API REST
+Endpoint JSON para integrações externas:
+```
+GET /api/concursos?cargo=Professor&page=1&page_size=10
+```
+
+### Arquivos usados pelo dashboard
+
+- `src/web/app.py` - aplicação Flask e rotas
+- `src/web/dashboard_service.py` - carregamento, filtros, métricas e execução manual
+- `src/web/templates/dashboard.html` - interface web
+- `src/web/static/dashboard.css` - estilos da interface
+- `data/dashboard_config.json` - configurações salvas da UI
+
+As configurações de notificação salvas no dashboard são usadas como padrão pelo runner `src/cli/scheduled_run.py` quando variáveis de ambiente/flags não forem informadas.
+
+---
+
 ## 🧪 Testes
 
 Execute a suite de testes unitários:
@@ -382,6 +436,9 @@ python -m pytest tests/ -v
 - ✅ `test_cronograma_parser.py` - Parser de datas e cronograma
 - ✅ `test_extractor.py` - Extração de metadata
 - ✅ `test_scraper.py` - Web scraping do DOU
+- ✅ `test_dashboard_service.py` - Filtros, métricas, ordenação e paginação do dashboard
+- ✅ `test_web_app.py` - Rotas HTML/API do dashboard
+- ✅ `test_scheduled_run.py` - Leitura de notificações via `dashboard_config.json`
 
 ### Testes Manuais com Dados Reais
 
@@ -434,7 +491,8 @@ python src/main.py -d 30 --export-pdf
 ### Prioridade Alta
 
 - **🎨 Interface Web**  
-  Dashboard web para visualização de concursos e gerenciamento de filtros/notificações
+  ✅ Dashboard web MVP concluído (visualização, filtros, ordenação, API REST, execução manual)  
+  🚧 Próximos passos: Status de monitoramento em tempo real, histórico de execuções
 
 - **🔔 Notificações Avançadas**  
   - Filtros por órgão, cargo, região

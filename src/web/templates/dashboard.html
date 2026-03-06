@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Doumon Dashboard</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}" />
+</head>
+<body>
+  <header class="hero">
+    <h1>Doumon Dashboard</h1>
+    <p>Visualizacao de concursos e gerenciamento de filtros/notificacoes</p>
+  </header>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <section class="flash-wrap">
+        {% for category, message in messages %}
+          <div class="flash {{ category }}">{{ message }}</div>
+        {% endfor %}
+      </section>
+    {% endif %}
+  {% endwith %}
+
+  <main class="layout">
+    <section class="panel metrics">
+      <h2>Resumo</h2>
+      <div class="metric-grid">
+        <article>
+          <span>Total</span>
+          <strong>{{ metrics.total }}</strong>
+        </article>
+        <article>
+          <span>Com Data de Prova</span>
+          <strong>{{ metrics.with_prova }}</strong>
+        </article>
+        <article>
+          <span>Com Banca</span>
+          <strong>{{ metrics.with_banca }}</strong>
+        </article>
+        <article>
+          <span>Com Vagas</span>
+          <strong>{{ metrics.with_vagas }}</strong>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Filtros de Busca</h2>
+      <form method="get" class="grid-form">
+        <input type="hidden" name="sort_by" value="{{ sort_by }}" />
+        <input type="hidden" name="sort_dir" value="{{ sort_dir }}" />
+        <label>Busca Livre
+          <input type="text" name="q" value="{{ filters.q }}" placeholder="orgao, cargo, banca, edital" />
+        </label>
+        <label>Orgao
+          <input type="text" name="orgao" value="{{ filters.orgao }}" />
+        </label>
+        <label>Cargo
+          <input type="text" name="cargo" value="{{ filters.cargo }}" />
+        </label>
+        <label>Banca
+          <input type="text" name="banca" value="{{ filters.banca }}" />
+        </label>
+        <label>Data Prova: De
+          <input type="date" name="date_from" value="{{ filters.date_from }}" />
+        </label>
+        <label>Data Prova: Ate
+          <input type="date" name="date_to" value="{{ filters.date_to }}" />
+        </label>
+        <label>Itens por pagina
+          <select name="page_size">
+            {% for size in [10, 20, 50] %}
+              <option value="{{ size }}" {% if page_meta.page_size == size %}selected{% endif %}>{{ size }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <div class="actions">
+          <button type="submit">Aplicar</button>
+          <a href="{{ url_for('index') }}" class="ghost">Limpar</a>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h2>Configuracoes de Filtros (Persistentes)</h2>
+      <form method="post" action="{{ url_for('save_filters') }}" class="grid-form">
+        <label>Keywords monitoradas (separadas por virgula)
+          <input type="text" name="keywords" value="{{ config.filters.keywords | join(', ') }}" />
+        </label>
+        <label>Janela padrao de dias
+          <input type="number" min="1" step="1" name="default_days" value="{{ config.filters.default_days }}" />
+        </label>
+        <div class="actions">
+          <button type="submit">Salvar Filtros</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h2>Configuracoes de Notificacao</h2>
+      <form method="post" action="{{ url_for('save_notifications') }}" class="grid-form">
+        <label>Threshold de alerta
+          <input type="number" min="1" step="1" name="threshold" value="{{ config.notifications.threshold }}" />
+        </label>
+        <label>Email destino
+          <input type="email" name="email_to" value="{{ config.notifications.email_to }}" placeholder="voce@exemplo.com" />
+        </label>
+        <label>Webhook URL
+          <input type="url" name="webhook_url" value="{{ config.notifications.webhook_url }}" placeholder="https://..." />
+        </label>
+        <label class="check">
+          <input type="checkbox" name="desktop_enabled" {% if config.notifications.desktop_enabled %}checked{% endif %} />
+          Habilitar notificacao desktop
+        </label>
+        <div class="actions">
+          <button type="submit">Salvar Notificacoes</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h2>Execucao Manual</h2>
+      <form method="post" action="{{ url_for('run_manual') }}" class="grid-form">
+        <label>Dias de busca
+          <input type="number" min="1" step="1" name="days" value="{{ config.filters.default_days }}" />
+        </label>
+        <label class="check">
+          <input type="checkbox" name="export_pdf" />
+          Exportar PDFs e extrair dados
+        </label>
+        <div class="actions">
+          <button type="submit" class="primary">Executar Monitoramento</button>
+        </div>
+      </form>
+      <p class="hint">
+        <small>⚠️ A exportacao de PDFs pode levar varios minutos dependendo do numero de concursos encontrados.</small>
+      </p>
+    </section>
+
+    <section class="panel table-panel">
+      <h2>Concursos ({{ page_meta.total }})</h2>
+      <div class="pager-head">
+        <span>Pagina {{ page_meta.page }} de {{ page_meta.total_pages }}</span>
+        <a class="ghost api-link" href="{{ api_url }}" target="_blank" rel="noopener">Ver API JSON</a>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th><a href="{{ url_with_updates(sort_by='orgao', sort_dir='asc' if sort_by != 'orgao' or sort_dir == 'desc' else 'desc', page=1) }}">Orgao</a></th>
+              <th><a href="{{ url_with_updates(sort_by='cargo', sort_dir='asc' if sort_by != 'cargo' or sort_dir == 'desc' else 'desc', page=1) }}">Cargo</a></th>
+              <th><a href="{{ url_with_updates(sort_by='banca', sort_dir='asc' if sort_by != 'banca' or sort_dir == 'desc' else 'desc', page=1) }}">Banca</a></th>
+              <th><a href="{{ url_with_updates(sort_by='edital_numero', sort_dir='asc' if sort_by != 'edital_numero' or sort_dir == 'desc' else 'desc', page=1) }}">Edital</a></th>
+              <th><a href="{{ url_with_updates(sort_by='data_prova', sort_dir='asc' if sort_by != 'data_prova' or sort_dir == 'desc' else 'desc', page=1) }}">Prova</a></th>
+              <th><a href="{{ url_with_updates(sort_by='vagas_total', sort_dir='asc' if sort_by != 'vagas_total' or sort_dir == 'desc' else 'desc', page=1) }}">Vagas</a></th>
+              <th>Taxa</th>
+              <th>Arquivo</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for rec in records %}
+              <tr>
+                <td>{{ rec.orgao or '-' }}</td>
+                <td>{{ rec.cargo or '-' }}</td>
+                <td>{{ rec.banca or '-' }}</td>
+                <td>{{ rec.edital_numero or '-' }}</td>
+                <td>{{ rec.data_prova or '-' }}</td>
+                <td>{{ rec.vagas_total if rec.vagas_total is not none else '-' }}</td>
+                <td>{{ rec.taxa_inscricao or '-' }}</td>
+                <td><code>{{ rec.file_name }}</code></td>
+              </tr>
+            {% else %}
+              <tr>
+                <td colspan="8" class="empty">Nenhum concurso para os filtros selecionados.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <nav class="pager">
+        {% if page_meta.has_prev %}
+          <a class="ghost" href="{{ url_with_updates(page=page_meta.page - 1) }}">Anterior</a>
+        {% endif %}
+        {% if page_meta.has_next %}
+          <a class="ghost" href="{{ url_with_updates(page=page_meta.page + 1) }}">Proxima</a>
+        {% endif %}
+      </nav>
+    </section>
+  </main>
+</body>
+</html>

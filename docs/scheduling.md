@@ -6,12 +6,14 @@ Ele executa `src/main.py`, analisa esta linha da saída:
 
 `Total abertura concursos (keywords: abertura, inicio, iniciado): <número>`
 
-Se `<número> >= threshold` (padrão `1`), ele envia uma notificação.
+Se `<número> >= threshold`, ele envia uma notificação.
+
+Se `--threshold` não for informado, o valor padrão vem de `data/dashboard_config.json` (campo `notifications.threshold`).
 
 Prioridade de notificação:
-1. Email SMTP (`DOU_SMTP_*` + `DOU_NOTIFY_*`)
-2. Webhook (`DOU_WEBHOOK_URL`)
-3. Notificação desktop (`notify-send`)
+1. Email SMTP (`DOU_SMTP_*` + `DOU_NOTIFY_*`, com fallback para `notifications.email_to` do dashboard)
+2. Webhook (`DOU_WEBHOOK_URL`, com fallback para `notifications.webhook_url` do dashboard)
+3. Notificação desktop (`notify-send`, respeitando `notifications.desktop_enabled` do dashboard)
 
 ---
 

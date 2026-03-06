@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 import re
 import shutil
@@ -14,6 +15,16 @@ from urllib import error, request
 COUNT_PATTERN = re.compile(r"Total abertura concursos \(keywords: .*?\):\s*(\d+)")
 
 
+DEFAULT_DASHBOARD_CONFIG = {
+    "notifications": {
+        "threshold": 1,
+        "email_to": "",
+        "webhook_url": "",
+        "desktop_enabled": True,
+    }
+}
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run Doumon and notify when abertura concursos count reaches threshold."
@@ -23,8 +34,8 @@ def parse_args() -> argparse.Namespace:
         "--threshold",
         "-t",
         type=int,
-        default=1,
-        help="Send alert when abertura concursos count is >= threshold",
+        default=None,
+        help="Send alert when abertura concursos count is >= threshold (defaults to dashboard setting)",
     )
     parser.add_argument(
         "--save-output",
@@ -55,12 +66,31 @@ def extract_count(output: str) -> int | None:
     return int(match.group(1))
 
 
-def send_email(subject: str, body: str) -> bool:
+def load_dashboard_notification_settings(project_root: Path) -> dict:
+    config_path = project_root / "data" / "dashboard_config.json"
+    settings = DEFAULT_DASHBOARD_CONFIG["notifications"].copy()
+    if not config_path.exists():
+        return settings
+
+    try:
+        content = json.loads(config_path.read_text(encoding="utf-8"))
+        notifications = content.get("notifications", {}) if isinstance(content, dict) else {}
+        settings["threshold"] = int(notifications.get("threshold", settings["threshold"]))
+        settings["email_to"] = str(notifications.get("email_to", settings["email_to"])).strip()
+        settings["webhook_url"] = str(notifications.get("webhook_url", settings["webhook_url"])).strip()
+        settings["desktop_enabled"] = bool(notifications.get("desktop_enabled", settings["desktop_enabled"]))
+    except Exception:
+        pass
+
+    return settings
+
+
+def send_email(subject: str, body: str, fallback_email_to: str = "") -> bool:
     host = os.getenv("DOU_SMTP_HOST", "")
     port = int(os.getenv("DOU_SMTP_PORT", "587"))
     user = os.getenv("DOU_SMTP_USER", "")
     password = os.getenv("DOU_SMTP_PASS", "")
-    to_addr = os.getenv("DOU_NOTIFY_TO", "")
+    to_addr = os.getenv("DOU_NOTIFY_TO", fallback_email_to)
     from_addr = os.getenv("DOU_NOTIFY_FROM", user)
 
     if not all([host, user, password, to_addr, from_addr]):
@@ -83,8 +113,8 @@ def send_email(subject: str, body: str) -> bool:
         return False
 
 
-def send_webhook(subject: str, body: str) -> bool:
-    webhook_url = os.getenv("DOU_WEBHOOK_URL", "")
+def send_webhook(subject: str, body: str, fallback_webhook_url: str = "") -> bool:
+    webhook_url = os.getenv("DOU_WEBHOOK_URL", fallback_webhook_url)
     if not webhook_url:
         return False
 
@@ -103,7 +133,9 @@ def send_webhook(subject: str, body: str) -> bool:
         return False
 
 
-def send_desktop(subject: str, body: str) -> bool:
+def send_desktop(subject: str, body: str, enabled: bool = True) -> bool:
+    if not enabled:
+        return False
     if shutil.which("notify-send") is None:
         return False
 
@@ -127,6 +159,8 @@ def maybe_save_output(path_value: str, output: str) -> None:
 def main() -> int:
     args = parse_args()
     project_root = Path(__file__).resolve().parents[2]
+    dashboard_notifications = load_dashboard_notification_settings(project_root)
+    threshold = args.threshold if args.threshold is not None else int(dashboard_notifications["threshold"])
 
     return_code, output = run_monitor(project_root=project_root, days=args.days)
     maybe_save_output(args.save_output, output)
@@ -134,10 +168,17 @@ def main() -> int:
     count = extract_count(output)
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+    def notify_any(subject: str, body: str) -> bool:
+        return (
+            send_email(subject, body, fallback_email_to=dashboard_notifications["email_to"])
+            or send_webhook(subject, body, fallback_webhook_url=dashboard_notifications["webhook_url"])
+            or send_desktop(subject, body, enabled=dashboard_notifications["desktop_enabled"])
+        )
+
     if return_code != 0:
         subject = "[Doumon] Execution failed"
         body = f"Run at: {now}\nExit code: {return_code}\n\nOutput:\n{output[-5000:]}"
-        notified = send_email(subject, body) or send_webhook(subject, body) or send_desktop(subject, body)
+        notified = notify_any(subject, body)
         print(output)
         print("Failure notification sent." if notified else "Execution failed and no notifier was configured.")
         return return_code
@@ -147,22 +188,22 @@ def main() -> int:
     if count is None:
         subject = "[Doumon] Could not parse abertura count"
         body = f"Run at: {now}\n\nOutput snippet:\n{output[-5000:]}"
-        notified = send_email(subject, body) or send_webhook(subject, body) or send_desktop(subject, body)
+        notified = notify_any(subject, body)
         print("Parse warning notification sent." if notified else "Could not parse count and no notifier was configured.")
         return 0
 
-    if count >= args.threshold:
+    if count >= threshold:
         subject = f"[Doumon] {count} abertura concurso(s) found"
         body = (
             f"Run at: {now}\n"
-            f"Threshold: {args.threshold}\n"
+            f"Threshold: {threshold}\n"
             f"Detected: {count}\n\n"
             "See command output for details."
         )
-        notified = send_email(subject, body) or send_webhook(subject, body) or send_desktop(subject, body)
+        notified = notify_any(subject, body)
         print("Alert sent." if notified else "Alert condition met, but no notifier was configured.")
     else:
-        print(f"No alert: detected {count}, threshold is {args.threshold}.")
+        print(f"No alert: detected {count}, threshold is {threshold}.")
 
     return 0
 
