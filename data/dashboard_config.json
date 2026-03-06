@@ -1,0 +1,16 @@
+{
+  "filters": {
+    "keywords": [
+      "abertura",
+      "inicio",
+      "iniciado"
+    ],
+    "default_days": 14
+  },
+  "notifications": {
+    "threshold": 1,
+    "email_to": "",
+    "webhook_url": "",
+    "desktop_enabled": true
+  }
+}

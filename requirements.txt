@@ -1,6 +1,9 @@
-playwright
-pdfplumber
-dateparser
-bs4
-requests
-flask
+playwright==1.40.0
+pdfplumber==0.10.3
+dateparser==1.2.0
+beautifulsoup4==4.12.2
+requests==2.31.0
+flask==3.0.0
+flask-login==0.6.3
+flask-wtf==1.2.1
+python-dotenv==1.0.0

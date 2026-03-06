@@ -1,6 +1,17 @@
-.venv
+﻿.venv
 __pycache__/
 *.pyc
+
+#  Security: Never commit sensitive files
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+secrets/
+logs/
+
+# Data files
 data/backups/
 data/summaries/
 data/review_*.csv
@@ -10,3 +21,4 @@ MELHORIAS_PARSER.md
 editais/*.pdf
 summaries/*.json
 tests/TEST_SUMMARY.md
+productization_plan.md

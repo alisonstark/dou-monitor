@@ -10,6 +10,7 @@
 - [Uso](#-uso)
 - [Fluxo de Trabalho](#-fluxo-de-trabalho)
 - [Arquitetura](#-arquitetura)
+- [Segurança](#-segurança)
 - [Agendamento e Automação](#-agendamento-e-automação)
 - [Testes](#-testes)
 - [Melhorias Futuras](#-melhorias-futuras)
@@ -189,6 +190,23 @@ dou-monitor/
     ├── test_scheduled_run.py
     └── test_categorize.py
 ```
+
+---
+
+## 🔒 Segurança
+
+### Por onde começar
+
+Comece por `security_readme.md`.
+
+### Leitura obrigatória (ordem recomendada)
+
+1. `security_readme.md`
+2. `docs/security/security_setup.md`
+3. `docs/security/aws_deployment_checklist.md`
+4. `docs/security/security_audit.md`
+5. `docs/security/security_fixes_summary.md`
+6. `docs/security/install_dependencies.md`
 
 ---
 
@@ -404,6 +422,15 @@ Abra no navegador:
 
 ### Funcionalidades do dashboard
 
+#### 🔄 Atualização de Dados Simplificada
+O dashboard agora é **auto-suficiente**:
+- **Status dos Dados**: Mostra quantidade de concursos em cache e timestamp da última atualização
+- **Botão "Atualizar Dados do DOU"**: Um clique para buscar novos concursos do DOU automaticamente
+- **Alertas Inteligentes**: Aviso quando os dados estão desatualizados (1+ dia)
+- **Processamento em Background**: Executa scraping completo e extração de PDFs automaticamente
+
+💡 **Não precisa mais usar o terminal!** O dashboard gerencia tudo pela interface web.
+
 #### Visualização em Duas Seções
 O dashboard organiza os concursos em duas categorias:
 - **Concursos Abertos**: Editais identificados com palavras-chave de abertura (abertura, início, iniciado)
@@ -411,11 +438,11 @@ O dashboard organiza os concursos em duas categorias:
 
 Cada concurso exibe link direto para **baixar o PDF do edital** diretamente no navegador.
 
-#### Execução Manual
-No painel "Execução Manual", você pode:
-- Iniciar uma busca no DOU com número configurável de dias de retrospecção
-- Opcionalmente exportar PDFs e extrair dados automaticamente
-- Ver resultados imediatamente via flash messages (total de concursos, aberturas encontradas, etc.)
+#### Configuração Avançada
+Para necessidades específicas, use "Configuração Avançada de Busca":
+- Personalizar número de dias de retrospecção
+- Executar apenas busca sem exportação (modo preview)
+- Controle fino sobre o processo de extração
 
 #### Filtros e Ordenação
 - Busca livre por texto em qualquer campo

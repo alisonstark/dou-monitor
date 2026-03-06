@@ -209,6 +209,12 @@ th a:hover {
   border: 1px solid #95d0b2;
 }
 
+.flash.warning {
+  background: #fff4e6;
+  border: 1px solid #ff9800;
+  color: #e65100;
+}
+
 .flash.error {
   background: #f6e0dc;
   border: 1px solid #dfb0a5;
@@ -235,6 +241,200 @@ button.primary:hover {
   font-size: 0.86rem;
 }
 
+.warning-box {
+  background: #fff4e6;
+  border: 2px solid #ff9800;
+  border-radius: 8px;
+  padding: 0.8rem;
+  margin-bottom: 1rem;
+  color: var(--ink);
+}
+
+.warning-box strong {
+  color: #e65100;
+}
+
+.update-status {
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border: 2px solid var(--accent);
+}
+
+.update-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.update-info h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.1rem;
+  color: var(--ink);
+}
+
+.update-time {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.update-time strong {
+  color: var(--accent-strong);
+}
+
+.stale-warning {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.no-data {
+  color: var(--warn);
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.btn-update {
+  background: var(--accent);
+  color: #fff;
+  border: 0;
+  border-radius: 8px;
+  padding: 0.8rem 1.5rem;
+  font-weight: 700;
+  font-size: 1.05rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+  box-shadow: 0 2px 8px rgba(10, 127, 120, 0.3);
+}
+
+.btn-update:hover {
+  background: var(--accent-strong);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(10, 127, 120, 0.4);
+}
+
+.review-panel {
+  border: 2px dashed #c8b88e;
+  background: linear-gradient(180deg, #fffdf8 0%, #fff7e8 100%);
+}
+
+.quick-filters {
+  display: flex;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.quick-filter-btn {
+  background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+  border: 1px solid #90caf9;
+  color: #1565c0;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  text-decoration: none;
+  font-size: 0.88rem;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.quick-filter-btn:hover {
+  background: linear-gradient(135deg, #bbdefb 0%, #90caf9 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(33, 150, 243, 0.3);
+}
+
+.collapsible summary {
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+}
+
+.collapsible summary::-webkit-details-marker {
+  display: none;
+}
+
+.collapsible summary h2::before {
+  content: "▶ ";
+  display: inline-block;
+  transition: transform 0.2s;
+  font-size: 0.8em;
+}
+
+.collapsible[open] summary h2::before {
+  transform: rotate(90deg);
+}
+
+.cronograma-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 140px;
+}
+
+.crono-item {
+  display: block;
+  font-size: 0.82rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.crono-item.prova-date {
+  color: var(--accent-strong);
+  font-weight: 600;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.25rem 0.6rem;
+  border-radius: 12px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.badge-reviewed {
+  background: #c8e6c9;
+  color: #2e7d32;
+  border: 1px solid #81c784;
+}
+
+.badge-pending {
+  background: #fff3e0;
+  color: #e65100;
+  border: 1px solid #ffb74d;
+}
+
+.action-btns {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.ghost-sm {
+  padding: 0.4rem 0.7rem;
+  font-size: 0.85rem;
+  color: var(--accent-strong);
+  background: #dbf0ec;
+  border-radius: 6px;
+  text-decoration: none;
+  border: 0;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ghost-sm:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+.btn-loading {
+  opacity: 0.7;
+}
+
+.text-muted {
+  color: var(--muted);
+  font-style: italic;
+}
+
 @media (max-width: 700px) {
   .hero h1 {
     font-size: 1.6rem;
@@ -242,5 +442,23 @@ button.primary:hover {
 
   table {
     font-size: 0.85rem;
+  }
+
+  .update-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .btn-update {
+    width: 100%;
+    text-align: center;
+  }
+  
+  .quick-filters {
+    flex-direction: column;
+  }
+  
+  .quick-filter-btn {
+    text-align: center;
   }
 }

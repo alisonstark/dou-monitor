@@ -8,8 +8,18 @@
 </head>
 <body>
   <header class="hero">
-    <h1>Doumon Dashboard</h1>
-    <p>Visualizacao de concursos e gerenciamento de filtros/notificacoes</p>
+    <div style="display: flex; justify-content: space-between; align-items: center; max-width: 1200px; margin: 0 auto;">
+      <div style="flex: 1; text-align: center;">
+        <h1>Doumon Dashboard</h1>
+        <p>Visualizacao de concursos e gerenciamento de filtros/notificacoes</p>
+      </div>
+      <div style="position: absolute; right: 2rem; top: 2rem;">
+        <a href="{{ url_for('logout') }}" style="display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.6rem 1.2rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; border-radius: 8px; font-size: 0.9rem; font-weight: 600; transition: transform 0.2s, box-shadow 0.2s;" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 5px 20px rgba(102, 126, 234, 0.4)'" onmouseout="this.style.transform=''; this.style.boxShadow=''">
+          <span>🚪</span>
+          <span>Sair</span>
+        </a>
+      </div>
+    </div>
   </header>
 
   {% with messages = get_flashed_messages(with_categories=true) %}
@@ -23,8 +33,43 @@
   {% endwith %}
 
   <main class="layout">
+    <section class="panel update-status">
+      <div class="update-header">
+        <div class="update-info">
+          <h3>📊 Status dos Dados</h3>
+          <p class="update-time">
+            {% if last_update.file_count > 0 %}
+              <strong>{{ last_update.file_count }}</strong> concursos em cache
+              <br/>
+              <small>Última atualização: {{ last_update.formatted }}</small>
+              {% if last_update.days_old >= 1 %}
+                <br/><span class="stale-warning">⚠️ Dados com {{ last_update.days_old }} dia(s). Considere atualizar!</span>
+              {% endif %}
+            {% else %}
+              <span class="no-data">❌ Nenhum dado encontrado. Execute uma busca abaixo!</span>
+            {% endif %}
+          </p>
+        </div>
+        <div class="update-actions">
+          <form method="post" action="{{ url_for('run_manual') }}" style="display: inline;">
+            <input type="hidden" name="days" value="{{ config.filters.default_days }}" />
+            <input type="hidden" name="export_pdf" value="on" />
+            <button type="submit" class="btn-update" id="btn-update-main">
+              <span class="btn-text">🔄 Atualizar Dados do DOU</span>
+              <span class="btn-loading" style="display: none;">⏳ Processando...</span>
+            </button>
+          </form>
+        </div>
+      </div>
+    </section>
+
     <section class="panel metrics">
-      <h2>Resumo</h2>
+      <h2>📊 Resumo Geral</h2>
+      <div class="quick-filters">
+        <a href="/?inscricoes_abertas=1" class="quick-filter-btn">📝 Inscrições Abertas Hoje</a>
+        <a href="/?provas_proximas=1" class="quick-filter-btn">⏰ Provas Próximas (7 dias)</a>
+        <a href="/?revisados=1" class="quick-filter-btn">✅ Apenas Revisados</a>
+      </div>
       <div class="metric-grid">
         <article>
           <span>Total</span>
@@ -53,8 +98,53 @@
       </div>
     </section>
 
-    <section class="panel">
-      <h2>Filtros de Busca</h2>
+    {% if edit_record %}
+    <section class="panel review-panel">
+      <h2>Revisao Manual (MIT) - Concursos Abertos</h2>
+      <p class="hint">
+        <small>Corrija campos inconsistentes e salve. O backend atualiza o JSON, cria backup e registra exemplo revisado para aprendizagem incremental.</small>
+      </p>
+      <form method="post" action="{{ url_for('save_manual_review') }}" class="grid-form">
+        <input type="hidden" name="file_name" value="{{ edit_record.file_name }}" />
+        <input type="hidden" name="next_query" value="{{ current_query }}" />
+
+        <label>Arquivo
+          <input type="text" value="{{ edit_record.file_name }}" disabled />
+        </label>
+        <label>Orgao
+          <input type="text" name="orgao" value="{{ edit_record.orgao }}" />
+        </label>
+        <label>Edital
+          <input type="text" name="edital_numero" value="{{ edit_record.edital_numero }}" />
+        </label>
+        <label>Cargo
+          <input type="text" name="cargo" value="{{ edit_record.cargo }}" />
+        </label>
+        <label>Banca
+          <input type="text" name="banca" value="{{ edit_record.banca }}" />
+        </label>
+        <label>Vagas Total
+          <input type="number" min="0" step="1" name="vagas_total" value="{{ edit_record.vagas_total if edit_record.vagas_total is not none else '' }}" />
+        </label>
+        <label>Taxa Inscricao
+          <input type="text" name="taxa_inscricao" value="{{ edit_record.taxa_inscricao }}" />
+        </label>
+        <label>Data Prova
+          <input type="date" name="data_prova" value="{{ edit_record.data_prova }}" />
+        </label>
+        <label>Revisor
+          <input type="text" name="reviewer" value="dashboard-user" />
+        </label>
+        <div class="actions">
+          <button type="submit" class="primary">Salvar Correcao Manual</button>
+          <a href="{{ cancel_edit_url }}" class="ghost">Cancelar</a>
+        </div>
+      </form>
+    </section>
+    {% endif %}
+
+    <details class="panel collapsible" open>
+      <summary><h2>🔍 Filtros de Busca</h2></summary>
       <form method="get" class="grid-form">
         <input type="hidden" name="sort_by" value="{{ sort_by }}" />
         <input type="hidden" name="sort_dir" value="{{ sort_dir }}" />
@@ -88,10 +178,11 @@
           <a href="{{ url_for('index') }}" class="ghost">Limpar</a>
         </div>
       </form>
-    </section>
+    </details>
 
-    <section class="panel">
-      <h2>Configuracoes de Filtros (Persistentes)</h2>
+    <details class="panel collapsible">
+      <summary><h2>⚙️ Configurações Avançadas</h2></summary>
+      <h3>Filtros Persistentes</h3>
       <form method="post" action="{{ url_for('save_filters') }}" class="grid-form">
         <label>Keywords monitoradas (separadas por virgula)
           <input type="text" name="keywords" value="{{ config.filters.keywords | join(', ') }}" />
@@ -103,10 +194,8 @@
           <button type="submit">Salvar Filtros</button>
         </div>
       </form>
-    </section>
-
-    <section class="panel">
-      <h2>Configuracoes de Notificacao</h2>
+      
+      <h3 style="margin-top: 1.5rem;">Notificações</h3>
       <form method="post" action="{{ url_for('save_notifications') }}" class="grid-form">
         <label>Threshold de alerta
           <input type="number" min="1" step="1" name="threshold" value="{{ config.notifications.threshold }}" />
@@ -122,29 +211,31 @@
           Habilitar notificacao desktop
         </label>
         <div class="actions">
-          <button type="submit">Salvar Notificacoes</button>
+          <button type="submit">Salvar Notificações</button>
         </div>
       </form>
-    </section>
-
-    <section class="panel">
-      <h2>Execucao Manual</h2>
+      
+      <h3 style="margin-top: 1.5rem;">Busca Manual Customizada</h3>
+      <p style="color: var(--muted); margin-bottom: 1rem;">
+        <small>💡 Use o botão "Atualizar Dados" no topo para busca rápida com configurações padrão.</small>
+      </p>
       <form method="post" action="{{ url_for('run_manual') }}" class="grid-form">
         <label>Dias de busca
           <input type="number" min="1" step="1" name="days" value="{{ config.filters.default_days }}" />
         </label>
         <label class="check">
-          <input type="checkbox" name="export_pdf" />
-          Exportar PDFs e extrair dados
+          <input type="checkbox" name="export_pdf" id="export_pdf" checked />
+          <strong>Exportar PDFs e extrair dados</strong>
         </label>
         <div class="actions">
-          <button type="submit" class="primary">Executar Monitoramento</button>
+          <button type="submit" class="primary">Executar com Configurações Personalizadas</button>
         </div>
       </form>
       <p class="hint">
-        <small>⚠️ A exportacao de PDFs pode levar varios minutos dependendo do numero de concursos encontrados.</small>
+        <small>📋 Com exportação: Processa TODOS os concursos (aberturas + outros editais) e salva em data/summaries/</small><br/>
+        <small>⏱️ O processamento pode levar vários minutos (ex: 14 concursos ≈ 5-10 min)</small>
       </p>
-    </section>
+    </details>
 
     <section class="panel table-panel">
       <h2>Concursos Abertos ({{ metrics.abertura_count }})</h2>
@@ -160,11 +251,11 @@
               <th><a href="{{ url_with_updates(sort_by='cargo', sort_dir='asc' if sort_by != 'cargo' or sort_dir == 'desc' else 'desc', page=1) }}">Cargo</a></th>
               <th><a href="{{ url_with_updates(sort_by='banca', sort_dir='asc' if sort_by != 'banca' or sort_dir == 'desc' else 'desc', page=1) }}">Banca</a></th>
               <th><a href="{{ url_with_updates(sort_by='edital_numero', sort_dir='asc' if sort_by != 'edital_numero' or sort_dir == 'desc' else 'desc', page=1) }}">Edital</a></th>
-              <th><a href="{{ url_with_updates(sort_by='data_prova', sort_dir='asc' if sort_by != 'data_prova' or sort_dir == 'desc' else 'desc', page=1) }}">Prova</a></th>
+              <th>Cronograma</th>
               <th><a href="{{ url_with_updates(sort_by='vagas_total', sort_dir='asc' if sort_by != 'vagas_total' or sort_dir == 'desc' else 'desc', page=1) }}">Vagas</a></th>
               <th>Taxa</th>
-              <th>Arquivo</th>
-              <th>Baixar Edital</th>
+              <th>Status</th>
+              <th>Ações</th>
             </tr>
           </thead>
           <tbody>
@@ -174,11 +265,37 @@
                 <td>{{ rec.cargo or '-' }}</td>
                 <td>{{ rec.banca or '-' }}</td>
                 <td>{{ rec.edital_numero or '-' }}</td>
-                <td>{{ rec.data_prova or '-' }}</td>
+                <td>
+                  <div class="cronograma-cell">
+                    {% if rec.inscricao_inicio %}
+                      <small class="crono-item">📝 Insc: {{ rec.inscricao_inicio[5:10] }}{% if rec.inscricao_fim %} a {{ rec.inscricao_fim[5:10] }}{% endif %}</small>
+                    {% endif %}
+                    {% if rec.isencao_inicio %}
+                      <small class="crono-item">💰 Isenção: {{ rec.isencao_inicio[5:10] }}</small>
+                    {% endif %}
+                    {% if rec.data_prova %}
+                      <small class="crono-item prova-date">✏️ Prova: {{ rec.data_prova[5:10] }}</small>
+                    {% endif %}
+                    {% if not rec.inscricao_inicio and not rec.data_prova %}
+                      <small class="text-muted">-</small>
+                    {% endif %}
+                  </div>
+                </td>
                 <td>{{ rec.vagas_total if rec.vagas_total is not none else '-' }}</td>
                 <td>{{ rec.taxa_inscricao or '-' }}</td>
-                <td><code>{{ rec.file_name }}</code></td>
-                <td><a href="/editais/{{ rec.pdf_filename }}" class="ghost" target="_blank" rel="noopener">📄 PDF</a></td>
+                <td>
+                  {% if rec.is_reviewed %}
+                    <span class="badge badge-reviewed" title="Revisado manualmente">✓ Revisado</span>
+                  {% else %}
+                    <span class="badge badge-pending" title="Extração automática">⚠ Não revisado</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <div class="action-btns">
+                    <a href="/editais/{{ rec.pdf_filename }}" class="ghost-sm" target="_blank" rel="noopener" title="Baixar PDF">📄</a>
+                    <a href="{{ url_with_updates(edit=rec.file_name) }}" class="ghost-sm" title="Editar (MIT)">✏️</a>
+                  </div>
+                </td>
               </tr>
             {% else %}
               <tr>
@@ -211,11 +328,10 @@
               <th>Cargo</th>
               <th>Banca</th>
               <th>Edital</th>
-              <th>Prova</th>
+              <th>Cronograma</th>
               <th>Vagas</th>
               <th>Taxa</th>
-              <th>Arquivo</th>
-              <th>Baixar Edital</th>
+              <th>PDF</th>
             </tr>
           </thead>
           <tbody>
@@ -233,7 +349,7 @@
               </tr>
             {% else %}
               <tr>
-                <td colspan="9" class="empty">Nenhum outro edital encontrado.</td>
+                <td colspan="8" class="empty">Nenhum outro edital encontrado.</td>
               </tr>
             {% endfor %}
           </tbody>
@@ -241,5 +357,15 @@
       </div>
     </section>
   </main>
+  
+  <script>
+    // Loading state for update button
+    document.getElementById('btn-update-main')?.addEventListener('click', function(e) {
+      const btn = e.currentTarget;
+      btn.querySelector('.btn-text').style.display = 'none';
+      btn.querySelector('.btn-loading').style.display = 'inline';
+      btn.disabled = true;
+    });
+  </script>
 </body>
 </html>

@@ -1,4 +1,5 @@
 import json
+import shutil
 from datetime import datetime
 from math import ceil
 from pathlib import Path
@@ -14,6 +15,21 @@ def _safe_int(value: Any, default: int) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def _parse_optional_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    raw = str(value).strip()
+    if raw == "":
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        try:
+            return int(float(raw.replace(".", "").replace(",", ".")))
+        except ValueError:
+            return None
 
 
 def load_dashboard_config(config_path: Path) -> Dict[str, Any]:
@@ -87,6 +103,7 @@ def load_summaries(summaries_dir: Path) -> List[Dict[str, Any]]:
             cronograma = data.get("cronograma", {})
             vagas = data.get("vagas", {})
             financeiro = data.get("financeiro", {})
+            review_meta = data.get("_review", {})
 
             records.append(
                 {
@@ -99,15 +116,56 @@ def load_summaries(summaries_dir: Path) -> List[Dict[str, Any]]:
                     "banca": _safe_text(banca_obj.get("nome")),
                     "inscricao_inicio": _safe_text(cronograma.get("inscricao_inicio")),
                     "inscricao_fim": _safe_text(cronograma.get("inscricao_fim")),
+                    "isencao_inicio": _safe_text(cronograma.get("isencao_inicio")),
                     "data_prova": _safe_text(cronograma.get("data_prova")),
                     "vagas_total": vagas.get("total"),
                     "taxa_inscricao": _safe_text(financeiro.get("taxa_inscricao")),
+                    "is_reviewed": bool(review_meta.get("last_reviewed")),
+                    "reviewer": _safe_text(review_meta.get("reviewer")),
                 }
             )
         except Exception:
             continue
 
     return records
+
+
+def get_last_update_time(summaries_dir: Path) -> Dict[str, Any]:
+    """Get timestamp of most recently modified summary file."""
+    if not summaries_dir.exists():
+        return {"timestamp": None, "formatted": "Nenhum dado encontrado", "file_count": 0}
+    
+    json_files = list(summaries_dir.glob("*.json"))
+    if not json_files:
+        return {"timestamp": None, "formatted": "Nenhum dado encontrado", "file_count": 0}
+    
+    # Get most recent modification time
+    latest_mtime = max(f.stat().st_mtime for f in json_files)
+    latest_dt = datetime.fromtimestamp(latest_mtime)
+    
+    # Calculate time ago
+    now = datetime.now()
+    delta = now - latest_dt
+    
+    if delta.days > 0:
+        time_ago = f"{delta.days} dia(s) atrás"
+    elif delta.seconds >= 3600:
+        hours = delta.seconds // 3600
+        time_ago = f"{hours} hora(s) atrás"
+    elif delta.seconds >= 60:
+        minutes = delta.seconds // 60
+        time_ago = f"{minutes} minuto(s) atrás"
+    else:
+        time_ago = "agora mesmo"
+    
+    formatted_date = latest_dt.strftime("%d/%m/%Y %H:%M")
+    
+    return {
+        "timestamp": latest_mtime,
+        "formatted": f"{formatted_date} ({time_ago})",
+        "file_count": len(json_files),
+        "days_old": delta.days
+    }
 
 
 def categorize_concursos(records: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
@@ -286,13 +344,14 @@ def paginate_summaries(records: List[Dict[str, Any]], page: int, page_size: int)
 
 def run_manual_monitoring(project_root: Path, days: int, export_pdf: bool = False) -> Dict[str, Any]:
     """
-    Execute monitoring workflow: scrape DOU, filter abertura concursos,
-    optionally export PDFs and extract to JSON.
+    Execute monitoring workflow: scrape DOU, categorize concursos,
+    optionally export PDFs and extract to JSON for ALL concursos found.
     
     Returns dict with:
         - success: bool
         - total_concursos: int (all concursos found)
-        - abertura_concursos: int (filtered by keywords)
+        - abertura_concursos: int (filtered by abertura/inicio/iniciado keywords)
+        - outros_concursos: int (other editais/concursos)
         - processed: int (PDFs exported if export_pdf=True)
         - errors: int (export/extraction errors)
         - error_message: str (if success=False)
@@ -337,17 +396,18 @@ def run_manual_monitoring(project_root: Path, days: int, export_pdf: bool = Fals
             "success": True,
             "total_concursos": len(concursos),
             "abertura_concursos": len(abertura_concursos),
+            "outros_concursos": len(concursos) - len(abertura_concursos),
             "processed": 0,
             "errors": 0,
             "error_message": "",
         }
         
-        # Export PDFs if requested
-        if export_pdf and abertura_concursos:
+        # Export PDFs if requested - Process ALL concursos, not just abertura
+        if export_pdf and concursos:
             try:
                 from export.pdf_export import save_concurso_pdf
                 
-                for concurso in abertura_concursos:
+                for concurso in concursos:
                     try:
                         pdf_result = save_concurso_pdf(concurso)
                         if isinstance(pdf_result, str) and pdf_result.startswith("Error"):
@@ -380,3 +440,140 @@ def run_manual_monitoring(project_root: Path, days: int, export_pdf: bool = Fals
             "errors": 0,
             "error_message": str(e),
         }
+
+
+def get_record_by_file_name(records: List[Dict[str, Any]], file_name: str) -> Dict[str, Any] | None:
+    target = _safe_text(file_name)
+    if not target:
+        return None
+    for rec in records:
+        if rec.get("file_name") == target:
+            return rec
+    return None
+
+
+def apply_manual_review(
+    summaries_dir: Path,
+    backup_dir: Path,
+    reviewed_examples_dir: Path,
+    file_name: str,
+    updates: Dict[str, Any],
+    reviewer: str,
+) -> Dict[str, Any]:
+    summary_path = summaries_dir / _safe_text(file_name)
+    if not summary_path.exists():
+        return {
+            "success": False,
+            "message": f"Arquivo nao encontrado: {file_name}",
+            "changed_fields": [],
+        }
+
+    try:
+        with summary_path.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Falha ao carregar JSON: {e}",
+            "changed_fields": [],
+        }
+
+    metadata = data.setdefault("metadata", {})
+    vagas = data.setdefault("vagas", {})
+    financeiro = data.setdefault("financeiro", {})
+    cronograma = data.setdefault("cronograma", {})
+
+    raw_banca = metadata.get("banca")
+    if isinstance(raw_banca, dict):
+        banca_obj = dict(raw_banca)
+    elif _safe_text(raw_banca):
+        banca_obj = {"nome": _safe_text(raw_banca)}
+    else:
+        banca_obj = {}
+
+    desired_values: Dict[str, tuple[Any, Any]] = {
+        "metadata.orgao": (metadata.get("orgao"), _safe_text(updates.get("orgao"))),
+        "metadata.edital_numero": (metadata.get("edital_numero"), _safe_text(updates.get("edital_numero"))),
+        "metadata.cargo": (metadata.get("cargo"), _safe_text(updates.get("cargo"))),
+        "metadata.banca": (
+            metadata.get("banca"),
+            {
+                **banca_obj,
+                "nome": _safe_text(updates.get("banca")),
+                "tipo": "manual",
+                "confianca_extracao": 1.0,
+            },
+        ),
+        "vagas.total": (vagas.get("total"), _parse_optional_int(updates.get("vagas_total"))),
+        "financeiro.taxa_inscricao": (
+            financeiro.get("taxa_inscricao"),
+            _safe_text(updates.get("taxa_inscricao")),
+        ),
+        "cronograma.data_prova": (cronograma.get("data_prova"), _safe_text(updates.get("data_prova"))),
+    }
+
+    changes: List[Dict[str, Any]] = []
+    for field_path, (old_val, new_val) in desired_values.items():
+        if old_val != new_val:
+            changes.append({"field": field_path, "old": old_val, "new": new_val})
+
+    if not changes:
+        return {
+            "success": True,
+            "message": "Nenhuma alteracao detectada.",
+            "changed_fields": [],
+        }
+
+    timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    backup_path = backup_dir / f"{summary_path.name}.{timestamp}.bak"
+
+    try:
+        shutil.copy2(summary_path, backup_path)
+
+        metadata["orgao"] = desired_values["metadata.orgao"][1]
+        metadata["edital_numero"] = desired_values["metadata.edital_numero"][1]
+        metadata["cargo"] = desired_values["metadata.cargo"][1]
+        metadata["banca"] = desired_values["metadata.banca"][1]
+        vagas["total"] = desired_values["vagas.total"][1]
+        financeiro["taxa_inscricao"] = desired_values["financeiro.taxa_inscricao"][1]
+        cronograma["data_prova"] = desired_values["cronograma.data_prova"][1]
+
+        review_meta = data.get("_review", {})
+        review_meta["last_reviewed"] = timestamp
+        review_meta["reviewer"] = _safe_text(reviewer) or "dashboard-manual-review"
+        review_meta["source"] = "dashboard"
+        data["_review"] = review_meta
+
+        with summary_path.open("w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Falha ao salvar revisao: {e}",
+            "changed_fields": [],
+        }
+
+    try:
+        reviewed_examples_dir.mkdir(parents=True, exist_ok=True)
+        example_path = reviewed_examples_dir / f"{summary_path.stem}.{timestamp}.json"
+        pdf_path = Path("editais") / f"{summary_path.stem}.pdf"
+        reviewed_payload = {
+            "summary_file": summary_path.name,
+            "pdf_file": str(pdf_path) if pdf_path.exists() else None,
+            "timestamp": timestamp,
+            "reviewer": data["_review"]["reviewer"],
+            "source": "dashboard",
+            "changes": changes,
+        }
+        with example_path.open("w", encoding="utf-8") as f:
+            json.dump(reviewed_payload, f, ensure_ascii=False, indent=2)
+    except Exception:
+        # Fail-open here: review was already applied and backed up.
+        pass
+
+    return {
+        "success": True,
+        "message": f"Revisao aplicada com {len(changes)} alteracao(oes).",
+        "changed_fields": [item["field"] for item in changes],
+    }
