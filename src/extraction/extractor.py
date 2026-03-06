@@ -1,6 +1,8 @@
 import re
 import json
 import logging
+import unicodedata
+from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 
@@ -503,13 +505,105 @@ def extract_from_pdf(path: str) -> Dict[str, Any]:
     return out
 
 
-def save_extraction_json(path_pdf: str, out_dir: str = "data/summaries") -> str:
+def _extract_document_id(value: str) -> str:
+    if not value:
+        return ""
+    match = re.search(r"(\d{6,})$", value)
+    return match.group(1) if match else ""
+
+
+def _normalize_text(value: Any) -> str:
+    text = str(value or "").strip().lower()
+    no_accents = "".join(
+        ch for ch in unicodedata.normalize("NFKD", text) if not unicodedata.combining(ch)
+    )
+    return re.sub(r"\s+", " ", no_accents)
+
+
+def _identity_key_from_payload(payload: Dict[str, Any]) -> str:
+    metadata = payload.get("metadata", {}) if isinstance(payload.get("metadata"), dict) else {}
+    key_parts = [
+        _normalize_text(metadata.get("orgao")),
+        _normalize_text(metadata.get("edital_numero")),
+        _normalize_text(metadata.get("cargo")),
+    ]
+    # Only use identity key if we have minimally meaningful data.
+    if sum(1 for part in key_parts if part) < 2:
+        return ""
+    return "|".join(key_parts)
+
+
+def _identity_key_from_file(path: Path) -> str:
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            payload = json.load(f)
+        if isinstance(payload, dict):
+            return _identity_key_from_payload(payload)
+    except Exception:
+        return ""
+    return ""
+
+
+def save_extraction_json(
+    path_pdf: str,
+    out_dir: str = "data/summaries",
+    source_url_title: str | None = None,
+    source_pdf_filename: str | None = None,
+    pdf_persisted: bool = True,
+) -> str:
     import os
 
     os.makedirs(out_dir, exist_ok=True)
     data = extract_from_pdf(path_pdf)
     base = os.path.splitext(os.path.basename(path_pdf))[0]
-    out_path = os.path.join(out_dir, f"{base}.json")
-    with open(out_path, "w", encoding="utf-8") as f:
+    source_title = (source_url_title or base).strip()
+    document_id = _extract_document_id(source_title)
+
+    # Canonical naming:
+    # - preferred: dou-<numeric-id>.json (stable regardless of title slug changes)
+    # - fallback: keep original base when no numeric suffix is available
+    canonical_stem = f"dou-{document_id}" if document_id else base
+    out_path = Path(out_dir) / f"{canonical_stem}.json"
+
+    source_block = data.get("_source", {}) if isinstance(data.get("_source"), dict) else {}
+    pdf_name = source_pdf_filename if source_pdf_filename is not None else (
+        os.path.basename(path_pdf) if pdf_persisted else None
+    )
+
+    source_block.update(
+        {
+            "pdf_filename": pdf_name,
+            "pdf_persisted": bool(pdf_persisted),
+            "url_title": source_title,
+            "document_id": document_id or None,
+            "canonical_summary": out_path.name,
+            "extracted_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+    )
+    data["_source"] = source_block
+
+    with out_path.open("w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
-    return out_path
+
+    # Smart cleanup: remove older/alternate files for the same document.
+    current_identity = _identity_key_from_payload(data)
+    for candidate in Path(out_dir).glob("*.json"):
+        if candidate.resolve() == out_path.resolve():
+            continue
+
+        should_remove = False
+        candidate_doc_id = _extract_document_id(candidate.stem)
+        if document_id and candidate_doc_id == document_id:
+            should_remove = True
+        elif current_identity:
+            if _identity_key_from_file(candidate) == current_identity:
+                should_remove = True
+
+        if should_remove:
+            try:
+                candidate.unlink()
+            except Exception:
+                # Fail-open: keep extraction successful even if cleanup fails.
+                pass
+
+    return str(out_path)

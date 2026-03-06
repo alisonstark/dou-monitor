@@ -1,6 +1,6 @@
 import json
 import shutil
-from datetime import datetime
+from datetime import datetime, timedelta
 from math import ceil
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
@@ -95,6 +95,8 @@ def load_summaries(summaries_dir: Path) -> List[Dict[str, Any]]:
     records: List[Dict[str, Any]] = []
     for file_path in sorted(summaries_dir.glob("*.json")):
         try:
+            file_mtime = file_path.stat().st_mtime
+            file_date = datetime.fromtimestamp(file_mtime).date().isoformat()
             with file_path.open("r", encoding="utf-8") as f:
                 data = json.load(f)
 
@@ -104,12 +106,17 @@ def load_summaries(summaries_dir: Path) -> List[Dict[str, Any]]:
             vagas = data.get("vagas", {})
             financeiro = data.get("financeiro", {})
             review_meta = data.get("_review", {})
+            source_meta = data.get("_source", {}) if isinstance(data.get("_source"), dict) else {}
+            if "pdf_filename" in source_meta:
+                pdf_filename = _safe_text(source_meta.get("pdf_filename"))
+            else:
+                pdf_filename = f"{file_path.stem}.pdf"
 
             records.append(
                 {
                     "id": file_path.stem,
                     "file_name": file_path.name,
-                    "pdf_filename": f"{file_path.stem}.pdf",
+                    "pdf_filename": pdf_filename,
                     "orgao": _safe_text(metadata.get("orgao")),
                     "edital_numero": _safe_text(metadata.get("edital_numero")),
                     "cargo": _safe_text(metadata.get("cargo")),
@@ -122,6 +129,8 @@ def load_summaries(summaries_dir: Path) -> List[Dict[str, Any]]:
                     "taxa_inscricao": _safe_text(financeiro.get("taxa_inscricao")),
                     "is_reviewed": bool(review_meta.get("last_reviewed")),
                     "reviewer": _safe_text(review_meta.get("reviewer")),
+                    "summary_date": file_date,
+                    "summary_mtime": file_mtime,
                 }
             )
         except Exception:
@@ -239,8 +248,7 @@ def filter_summaries(records: List[Dict[str, Any]], filters: Dict[str, str]) -> 
     orgao = _safe_text(filters.get("orgao"))
     cargo = _safe_text(filters.get("cargo"))
     banca = _safe_text(filters.get("banca"))
-    date_from = _safe_text(filters.get("date_from"))
-    date_to = _safe_text(filters.get("date_to"))
+    inscricao_to = _safe_text(filters.get("inscricao_to"))
 
     filtered: List[Dict[str, Any]] = []
     for rec in records:
@@ -262,12 +270,59 @@ def filter_summaries(records: List[Dict[str, Any]], filters: Dict[str, str]) -> 
             if not _contains(hay, q):
                 continue
 
-        if (date_from or date_to) and not _in_date_range(rec.get("data_prova", ""), date_from, date_to):
-            continue
+        if inscricao_to:
+            inscricao_ref = _safe_text(rec.get("inscricao_fim")) or _safe_text(rec.get("inscricao_inicio"))
+            if not _in_date_range(inscricao_ref, "", inscricao_to):
+                continue
 
         filtered.append(rec)
 
     return filtered
+
+
+def filter_records_by_cache_window(records: List[Dict[str, Any]], window_days: int) -> List[Dict[str, Any]]:
+    """Keep records that were updated in cache within the last N days."""
+    safe_window = max(1, int(window_days))
+    cutoff_date = (datetime.now().date() - timedelta(days=safe_window - 1))
+
+    filtered: List[Dict[str, Any]] = []
+    for rec in records:
+        raw_date = _safe_text(rec.get("summary_date"))
+        try:
+            summary_date = datetime.strptime(raw_date, "%Y-%m-%d").date()
+        except ValueError:
+            continue
+        if summary_date >= cutoff_date:
+            filtered.append(rec)
+    return filtered
+
+
+def get_cache_coverage_info(records: List[Dict[str, Any]], requested_days: int) -> Dict[str, int | bool]:
+    """Estimate how many days of cached data are available based on summary file dates."""
+    safe_requested = max(1, int(requested_days))
+    dates = []
+    for rec in records:
+        raw_date = _safe_text(rec.get("summary_date"))
+        try:
+            dates.append(datetime.strptime(raw_date, "%Y-%m-%d").date())
+        except ValueError:
+            continue
+
+    if not dates:
+        return {
+            "requested_days": safe_requested,
+            "available_days": 0,
+            "has_gap": True,
+        }
+
+    oldest = min(dates)
+    available_days = (datetime.now().date() - oldest).days + 1
+
+    return {
+        "requested_days": safe_requested,
+        "available_days": max(1, available_days),
+        "has_gap": safe_requested > available_days,
+    }
 
 
 def summarize_metrics(records: List[Dict[str, Any]]) -> Dict[str, int]:
@@ -345,20 +400,23 @@ def paginate_summaries(records: List[Dict[str, Any]], page: int, page_size: int)
 def run_manual_monitoring(project_root: Path, days: int, export_pdf: bool = False) -> Dict[str, Any]:
     """
     Execute monitoring workflow: scrape DOU, categorize concursos,
-    optionally export PDFs and extract to JSON for ALL concursos found.
+    extract to JSON for ALL concursos found.
+    PDF persistence is optional (export_pdf=True).
     
     Returns dict with:
         - success: bool
         - total_concursos: int (all concursos found)
         - abertura_concursos: int (filtered by abertura/inicio/iniciado keywords)
         - outros_concursos: int (other editais/concursos)
-        - processed: int (PDFs exported if export_pdf=True)
+        - processed: int (summaries extracted)
+        - saved_pdfs: int (PDFs persisted to editais/)
         - errors: int (export/extraction errors)
         - error_message: str (if success=False)
     """
     try:
         import sys
         import os
+        import tempfile
         import unicodedata
         from datetime import timedelta
         
@@ -398,33 +456,55 @@ def run_manual_monitoring(project_root: Path, days: int, export_pdf: bool = Fals
             "abertura_concursos": len(abertura_concursos),
             "outros_concursos": len(concursos) - len(abertura_concursos),
             "processed": 0,
+            "saved_pdfs": 0,
             "errors": 0,
             "error_message": "",
         }
         
-        # Export PDFs if requested - Process ALL concursos, not just abertura
-        if export_pdf and concursos:
+        # Process ALL concursos, not just abertura.
+        if concursos:
             try:
                 from export.pdf_export import save_concurso_pdf
                 
                 for concurso in concursos:
+                    pdf_path = ""
                     try:
-                        pdf_result = save_concurso_pdf(concurso)
+                        if export_pdf:
+                            pdf_path = os.path.join(
+                                str(project_root / "editais"),
+                                f"{concurso['url_title']}.pdf",
+                            )
+                            pdf_result = save_concurso_pdf(concurso)
+                        else:
+                            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp_file:
+                                pdf_path = tmp_file.name
+                            pdf_result = save_concurso_pdf(concurso, output_path=pdf_path)
+
                         if isinstance(pdf_result, str) and pdf_result.startswith("Error"):
                             result["errors"] += 1
                         else:
-                            result["processed"] += 1
-                            # Attempt extraction
+                            if export_pdf:
+                                result["saved_pdfs"] += 1
+                            # Attempt extraction (summary is always persisted)
                             try:
-                                pdf_path = os.path.join(
-                                    str(project_root / "editais"),
-                                    f"{concurso['url_title']}.pdf"
+                                save_extraction_json(
+                                    pdf_path,
+                                    source_url_title=concurso.get("url_title"),
+                                    source_pdf_filename=(f"{concurso['url_title']}.pdf" if export_pdf else None),
+                                    pdf_persisted=export_pdf,
                                 )
-                                save_extraction_json(pdf_path)
+                                result["processed"] += 1
                             except Exception:
-                                pass  # Extraction errors are not counted as failures
+                                result["errors"] += 1
                     except Exception:
                         result["errors"] += 1
+                    finally:
+                        if not export_pdf and pdf_path:
+                            try:
+                                if os.path.exists(pdf_path):
+                                    os.remove(pdf_path)
+                            except Exception:
+                                pass
             except ImportError:
                 result["error_message"] = "PDF export unavailable (Playwright not installed)"
                 result["errors"] += 1
@@ -557,10 +637,15 @@ def apply_manual_review(
     try:
         reviewed_examples_dir.mkdir(parents=True, exist_ok=True)
         example_path = reviewed_examples_dir / f"{summary_path.stem}.{timestamp}.json"
-        pdf_path = Path("editais") / f"{summary_path.stem}.pdf"
+        source_meta = data.get("_source", {}) if isinstance(data.get("_source"), dict) else {}
+        if "pdf_filename" in source_meta:
+            source_pdf = _safe_text(source_meta.get("pdf_filename"))
+        else:
+            source_pdf = f"{summary_path.stem}.pdf"
+        pdf_path = Path("editais") / source_pdf
         reviewed_payload = {
             "summary_file": summary_path.name,
-            "pdf_file": str(pdf_path) if pdf_path.exists() else None,
+            "pdf_file": str(pdf_path) if source_pdf and pdf_path.exists() else None,
             "timestamp": timestamp,
             "reviewer": data["_review"]["reviewer"],
             "source": "dashboard",

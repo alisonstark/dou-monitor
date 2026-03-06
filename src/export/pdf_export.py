@@ -46,9 +46,15 @@ def _close_browser_context():
 atexit.register(_close_browser_context)
 
 
-def save_concurso_pdf(concurso, output_dir="editais"):
-    os.makedirs(output_dir, exist_ok=True)
-    filename = os.path.join(output_dir, f"{concurso['url_title']}.pdf")
+def save_concurso_pdf(concurso, output_dir="editais", output_path=None):
+    if output_path:
+        filename = output_path
+        parent = os.path.dirname(filename)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+    else:
+        os.makedirs(output_dir, exist_ok=True)
+        filename = os.path.join(output_dir, f"{concurso['url_title']}.pdf")
 
     # If file exists and is locked, try to remove it first
     if os.path.exists(filename):

@@ -5,7 +5,7 @@
       "inicio",
       "iniciado"
     ],
-    "default_days": 14
+    "default_days": 7
   },
   "notifications": {
     "threshold": 1,

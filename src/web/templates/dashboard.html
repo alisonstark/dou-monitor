@@ -33,7 +33,7 @@
   {% endwith %}
 
   <main class="layout">
-    <section class="panel update-status">
+    <section class="panel update-status" id="update-status-panel">
       <div class="update-header">
         <div class="update-info">
           <h3>📊 Status dos Dados</h3>
@@ -52,8 +52,8 @@
         </div>
         <div class="update-actions">
           <form method="post" action="{{ url_for('run_manual') }}" style="display: inline;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
             <input type="hidden" name="days" value="{{ config.filters.default_days }}" />
-            <input type="hidden" name="export_pdf" value="on" />
             <button type="submit" class="btn-update" id="btn-update-main">
               <span class="btn-text">🔄 Atualizar Dados do DOU</span>
               <span class="btn-loading" style="display: none;">⏳ Processando...</span>
@@ -105,6 +105,7 @@
         <small>Corrija campos inconsistentes e salve. O backend atualiza o JSON, cria backup e registra exemplo revisado para aprendizagem incremental.</small>
       </p>
       <form method="post" action="{{ url_for('save_manual_review') }}" class="grid-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
         <input type="hidden" name="file_name" value="{{ edit_record.file_name }}" />
         <input type="hidden" name="next_query" value="{{ current_query }}" />
 
@@ -160,11 +161,8 @@
         <label>Banca
           <input type="text" name="banca" value="{{ filters.banca }}" />
         </label>
-        <label>Data Prova: De
-          <input type="date" name="date_from" value="{{ filters.date_from }}" />
-        </label>
-        <label>Data Prova: Ate
-          <input type="date" name="date_to" value="{{ filters.date_to }}" />
+        <label>Data Inscricao: Ate
+          <input type="date" name="inscricao_to" value="{{ filters.inscricao_to }}" />
         </label>
         <label>Itens por pagina
           <select name="page_size">
@@ -184,6 +182,7 @@
       <summary><h2>⚙️ Configurações Avançadas</h2></summary>
       <h3>Filtros Persistentes</h3>
       <form method="post" action="{{ url_for('save_filters') }}" class="grid-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
         <label>Keywords monitoradas (separadas por virgula)
           <input type="text" name="keywords" value="{{ config.filters.keywords | join(', ') }}" />
         </label>
@@ -197,6 +196,7 @@
       
       <h3 style="margin-top: 1.5rem;">Notificações</h3>
       <form method="post" action="{{ url_for('save_notifications') }}" class="grid-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
         <label>Threshold de alerta
           <input type="number" min="1" step="1" name="threshold" value="{{ config.notifications.threshold }}" />
         </label>
@@ -219,21 +219,22 @@
       <p style="color: var(--muted); margin-bottom: 1rem;">
         <small>💡 Use o botão "Atualizar Dados" no topo para busca rápida com configurações padrão.</small>
       </p>
-      <form method="post" action="{{ url_for('run_manual') }}" class="grid-form">
+      <form method="post" action="{{ url_for('run_manual') }}" class="grid-form" autocomplete="off">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
         <label>Dias de busca
           <input type="number" min="1" step="1" name="days" value="{{ config.filters.default_days }}" />
         </label>
         <label class="check">
-          <input type="checkbox" name="export_pdf" id="export_pdf" checked />
-          <strong>Exportar PDFs e extrair dados</strong>
+          <input type="checkbox" name="export_pdf" id="export_pdf" />
+          <strong>Salvar PDFs no disco (opcional)</strong>
         </label>
         <div class="actions">
-          <button type="submit" class="primary">Executar com Configurações Personalizadas</button>
+          <button type="submit" class="primary">Realizar Busca</button>
         </div>
       </form>
       <p class="hint">
-        <small>📋 Com exportação: Processa TODOS os concursos (aberturas + outros editais) e salva em data/summaries/</small><br/>
-        <small>⏱️ O processamento pode levar vários minutos (ex: 14 concursos ≈ 5-10 min)</small>
+        <small>📋 Sempre processa TODOS os concursos (aberturas + outros editais) e atualiza data/summaries/.</small><br/>
+        <small>💾 Marque a opção acima apenas se quiser manter os PDFs em editais/ para download posterior.</small>
       </p>
     </details>
 
@@ -292,7 +293,11 @@
                 </td>
                 <td>
                   <div class="action-btns">
-                    <a href="/editais/{{ rec.pdf_filename }}" class="ghost-sm" target="_blank" rel="noopener" title="Baixar PDF">📄</a>
+                    {% if rec.pdf_filename %}
+                      <a href="/editais/{{ rec.pdf_filename }}" class="ghost-sm" target="_blank" rel="noopener" title="Baixar PDF">📄</a>
+                    {% else %}
+                      <span class="ghost-sm" title="PDF não salvo">—</span>
+                    {% endif %}
                     <a href="{{ url_with_updates(edit=rec.file_name) }}" class="ghost-sm" title="Editar (MIT)">✏️</a>
                   </div>
                 </td>
@@ -318,7 +323,11 @@
     <section class="panel table-panel">
       <h2>Outros Editais e Concursos ({{ metrics.outros_count }})</h2>
       <p class="hint">
-        <small>Editais que contem "concurso" ou "edital" mas nao foram identificados como aberturas.</small>
+        <small>Editais que contem "concurso" ou "edital" mas nao foram identificados como aberturas.</small><br/>
+        <small>Mostrando apenas itens em cache dentro da janela de {{ outros_window_info.requested_days }} dia(s) configurada em "Configuracoes Avancadas".</small>
+        {% if outros_window_info.has_gap %}
+          <br/><small class="stale-warning">⚠️ O cache cobre cerca de {{ outros_window_info.available_days }} dia(s). Para atingir {{ outros_window_info.requested_days }} dia(s), <a href="#update-status-panel">rode "Atualizar Dados do DOU"</a>.</small>
+        {% endif %}
       </p>
       <div class="table-scroll">
         <table>
@@ -345,7 +354,13 @@
                 <td>{{ rec.vagas_total if rec.vagas_total is not none else '-' }}</td>
                 <td>{{ rec.taxa_inscricao or '-' }}</td>
                 <td><code>{{ rec.file_name }}</code></td>
-                <td><a href="/editais/{{ rec.pdf_filename }}" class="ghost" target="_blank" rel="noopener">📄 PDF</a></td>
+                <td>
+                  {% if rec.pdf_filename %}
+                    <a href="/editais/{{ rec.pdf_filename }}" class="ghost" target="_blank" rel="noopener">📄 PDF</a>
+                  {% else %}
+                    <span class="text-muted">Não salvo</span>
+                  {% endif %}
+                </td>
               </tr>
             {% else %}
               <tr>
@@ -366,6 +381,12 @@
       btn.querySelector('.btn-loading').style.display = 'inline';
       btn.disabled = true;
     });
+
+    // Keep PDF persistence opt-in (unchecked) on each page load.
+    const exportPdfCheckbox = document.getElementById('export_pdf');
+    if (exportPdfCheckbox) {
+      exportPdfCheckbox.checked = false;
+    }
   </script>
 </body>
 </html>

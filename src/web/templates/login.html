@@ -149,7 +149,7 @@
             {% endif %}
         {% endwith %}
         
-        <form method="post" action="{{ url_for('login') }}">
+        <form method="post" action="{{ url_for('login') }}" autocomplete="off">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" class="csrf-token"/>
             
             <div class="form-group">
@@ -176,11 +176,32 @@
                     placeholder="Digite sua senha"
                 />
             </div>
+
+            {% if show_captcha %}
+            <div class="form-group">
+                <label for="captcha_answer">Verificação anti-robô</label>
+                <input
+                    type="text"
+                    id="captcha_answer"
+                    name="captcha_answer"
+                    required
+                    autocomplete="off"
+                    placeholder="{{ captcha_prompt }}"
+                />
+                <small style="color: #666; display: block; margin-top: 6px;">{{ captcha_prompt }}</small>
+            </div>
+            {% endif %}
             
             <button type="submit" class="btn-login">
                 Entrar
             </button>
         </form>
+
+        <div style="text-align: center; margin-top: 10px;">
+            <a href="#" onclick="alert('Recuperação de senha em desenvolvimento. Em breve você poderá solicitar redefinição pelo email cadastrado.'); return false;" style="color: #667eea; font-size: 13px; text-decoration: none;">
+                Esqueci a senha
+            </a>
+        </div>
         
         <div style="text-align: center; margin-top: 24px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
             <p style="color: #666; font-size: 14px; margin-bottom: 12px;">

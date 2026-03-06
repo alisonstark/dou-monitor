@@ -54,7 +54,12 @@ def process_abertura_concursos(abertura_concursos, export_pdf):
                     # after saving the PDF, attempt extraction to JSON
                     try:
                         pdf_path = os.path.join("editais", f"{concurso['url_title']}.pdf")
-                        out_json = save_extraction_json(pdf_path)
+                        out_json = save_extraction_json(
+                            pdf_path,
+                            source_url_title=concurso.get("url_title"),
+                            source_pdf_filename=f"{concurso['url_title']}.pdf",
+                            pdf_persisted=True,
+                        )
                         print(f"Extraction saved to {out_json}")
                     except Exception as ex:
                         print(f"Warning: extraction failed: {ex}")

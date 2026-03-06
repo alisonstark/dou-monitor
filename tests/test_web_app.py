@@ -9,6 +9,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from web.app import create_app  # noqa: E402
 
 
+def _login_test_user(client, app):
+    with client.session_transaction() as session:
+        session["_user_id"] = "admin"
+        session["_fresh"] = True
+        session["session_boot_id"] = app.config.get("SERVER_BOOT_ID")
+
+
 class TestWebApp(unittest.TestCase):
     def test_dashboard_and_api(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -31,7 +38,10 @@ class TestWebApp(unittest.TestCase):
             (summaries_dir / "item.json").write_text(json.dumps(sample), encoding="utf-8")
 
             app = create_app(summaries_dir=summaries_dir, config_path=config_path)
+            app.config["TESTING"] = True
+            app.config["WTF_CSRF_ENABLED"] = False
             client = app.test_client()
+            _login_test_user(client, app)
 
             html_resp = client.get("/?q=prof&sort_by=orgao&sort_dir=asc&page=1&page_size=10")
             self.assertEqual(html_resp.status_code, 200)
@@ -52,7 +62,10 @@ class TestWebApp(unittest.TestCase):
             config_path = root / "dashboard_config.json"
 
             app = create_app(summaries_dir=summaries_dir, config_path=config_path)
+            app.config["TESTING"] = True
+            app.config["WTF_CSRF_ENABLED"] = False
             client = app.test_client()
+            _login_test_user(client, app)
 
             # Test that POST to /run/manual redirects (default behavior)
             # We don't test actual monitoring since it requires network access
@@ -84,7 +97,10 @@ class TestWebApp(unittest.TestCase):
             (summaries_dir / file_name).write_text(json.dumps(sample), encoding="utf-8")
 
             app = create_app(summaries_dir=summaries_dir, config_path=config_path)
+            app.config["TESTING"] = True
+            app.config["WTF_CSRF_ENABLED"] = False
             client = app.test_client()
+            _login_test_user(client, app)
 
             html_resp = client.get(f"/?edit={file_name}")
             self.assertEqual(html_resp.status_code, 200)

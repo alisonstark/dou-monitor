@@ -3,6 +3,7 @@ import sys
 import json
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 # Add src to path so we can import the modules
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
@@ -14,6 +15,7 @@ from extraction.extractor import (
     extract_cronograma,
     extract_vagas,
     extract_financeiro,
+    save_extraction_json,
 )
 
 
@@ -261,6 +263,48 @@ class TestExtractVagas(unittest.TestCase):
         text = "Total de vagas: 1000"
         result = extract_vagas(text)
         self.assertEqual(result["total"], 1000)
+
+
+class TestSaveExtractionJson(unittest.TestCase):
+    def test_save_uses_canonical_name_and_removes_legacy_same_id(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            out_dir = root / "summaries"
+            pdf_path = root / "edital-de-abertura-690330310.pdf"
+            pdf_path.write_text("dummy", encoding="utf-8")
+
+            legacy = out_dir / "2023-690330310.json"
+            out_dir.mkdir(parents=True, exist_ok=True)
+            legacy.write_text(json.dumps({"metadata": {"orgao": "UFX", "edital_numero": "1", "cargo": "Prof"}}), encoding="utf-8")
+
+            payload = {
+                "metadata": {
+                    "orgao": "Universidade Federal X",
+                    "edital_numero": "12/2026",
+                    "cargo": "Professor",
+                    "banca": {"nome": "FCC"},
+                },
+                "vagas": {"total": 1},
+                "financeiro": {"taxa_inscricao": "R$ 100,00"},
+                "cronograma": {"data_prova": "2026-05-01"},
+            }
+
+            with patch("extraction.extractor.extract_from_pdf", return_value=payload):
+                saved_path = Path(
+                    save_extraction_json(
+                        str(pdf_path),
+                        out_dir=str(out_dir),
+                        source_url_title="edital-de-abertura-690330310",
+                    )
+                )
+
+            self.assertEqual(saved_path.name, "dou-690330310.json")
+            self.assertTrue(saved_path.exists())
+            self.assertFalse(legacy.exists())
+
+            saved = json.loads(saved_path.read_text(encoding="utf-8"))
+            self.assertEqual(saved.get("_source", {}).get("document_id"), "690330310")
+            self.assertEqual(saved.get("_source", {}).get("pdf_filename"), "edital-de-abertura-690330310.pdf")
 
 
 class TestExtractFinanceiro(unittest.TestCase):

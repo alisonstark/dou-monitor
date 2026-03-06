@@ -45,7 +45,7 @@ class TestDashboardService(unittest.TestCase):
               },
               \"vagas\": {\"total\": 8},
               \"financeiro\": {\"taxa_inscricao\": \"R$ 100,00\"},
-              \"cronograma\": {\"data_prova\": \"2026-05-12\"}
+                            \"cronograma\": {\"inscricao_fim\": \"2026-05-12\", \"data_prova\": \"2026-06-20\"}
             }"""
             (summaries_dir / "amostra.json").write_text(content, encoding="utf-8")
 
@@ -61,8 +61,7 @@ class TestDashboardService(unittest.TestCase):
             by_date = filter_summaries(
                 records,
                 {
-                    "date_from": "2026-05-01",
-                    "date_to": "2026-05-30",
+                    "inscricao_to": "2026-05-30",
                 },
             )
             self.assertEqual(len(by_date), 1)
