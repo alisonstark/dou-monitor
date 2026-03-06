@@ -155,14 +155,22 @@ dou-monitor/
 │   ├── export/                         # Geração de outputs
 │   │   └── pdf_export.py               # Exportação PDF via Playwright
 │   │
-│   └── cli/                            # Interfaces CLI
-│       ├── review_cli.py               # CLI de revisão
-│       └── scheduled_run.py            # Runner agendado
+│   ├── cli/                            # Interfaces CLI
+│   │   ├── review_cli.py               # CLI de revisão
+│   │   └── scheduled_run.py            # Runner agendado
+│   │
+│   └── web/                            # Dashboard web
+│       ├── app.py                      # Aplicação Flask e rotas
+│       ├── dashboard_service.py        # Serviço de carregamento/filtros/categorização
+│       ├── templates/
+│       │   └── dashboard.html          # Template Jinja2
+│       └── static/
+│           └── dashboard.css           # Estilos CSS
 │
 ├── data/                               # Dados e configurações
 │   ├── cargos_whitelist.json           # Lista de cargos conhecidos
-│   ├── bancas_whitelist.json           # Lista de bancas conhecidas (auto-gerado)
 │   ├── summaries/                      # Resumos JSON extraídos
+│   ├── dashboard_config.json           # Configurações salvas do dashboard (gerado)
 │   ├── backups/                        # Backups de alterações
 │   └── reviewed_examples/              # Exemplos revisados (treinamento)
 │
@@ -175,7 +183,11 @@ dou-monitor/
 └── tests/                              # Testes unitários
     ├── test_cronograma_parser.py
     ├── test_extractor.py
-    └── test_scraper.py
+    ├── test_scraper.py
+    ├── test_dashboard_service.py
+    ├── test_web_app.py
+    ├── test_scheduled_run.py
+    └── test_categorize.py
 ```
 
 ---
@@ -436,7 +448,7 @@ Execute a suite de testes unitários:
 
 ```bash
 # Da raiz do projeto
-python -m pytest tests/ -v
+python -m unittest discover tests -v
 ```
 
 **Cobertura de testes:**
