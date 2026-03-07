@@ -342,7 +342,10 @@ def create_app(summaries_dir: Path | None = None, config_path: Path | None = Non
         outros_window_info = get_cache_coverage_info(records, outros_window_days)
 
         edit_file = request.args.get("edit", "")
+        # Search for edit_record in both abertura and outros (to allow review of all editais)
         edit_record = get_record_by_file_name(abertura_records, edit_file)
+        if not edit_record:
+            edit_record = get_record_by_file_name(outros_filtered, edit_file)
 
         cancel_query_params = request.args.to_dict(flat=True)
         cancel_query_params.pop("edit", None)
