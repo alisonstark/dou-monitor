@@ -11,9 +11,47 @@ WHITELISTS = {
     "metadata.cargo": Path("data/cargos_whitelist.json"),
 }
 
+# Sentinel values to ignore (not applicable, empty, etc.)
+# These should NOT be added to whitelists even if they appear frequently
+SENTINEL_VALUES = {
+    "N/A", "NA", "N.A.", "N.A", 
+    "NÃO APLICÁVEL", "NAO APLICAVEL", 
+    "NÃO SE APLICA", "NAO SE APLICA",
+    "-", "–", "—",  # Different dash types
+    "SEM INFORMAÇÃO", "SEM INFORMACAO",
+    "NÃO INFORMADO", "NAO INFORMADO",
+    "VAZIO", "NULO", "NULL",
+}
+
+
+def _is_valid_value(value: str) -> bool:
+    """Check if value is valid for whitelist (not a sentinel/placeholder)."""
+    if not value:
+        return False
+    
+    normalized = value.strip().upper()
+    
+    # Reject sentinel values
+    if normalized in SENTINEL_VALUES:
+        return False
+    
+    # Reject very short values (likely typos or abbreviations)
+    if len(normalized) <= 1:
+        return False
+    
+    # Reject values that are purely punctuation/special chars
+    if all(c in "-–—.,;:!?()[]{}/<>|\\@#$%^&*+=~`\"'" for c in normalized):
+        return False
+    
+    return True
+
 
 def find_candidates(field: str, threshold: int = 3):
-    """Find candidates for a given field from reviewed examples."""
+    """Find candidates for a given field from reviewed examples.
+    
+    Filters out sentinel values (N/A, null, etc.) to ensure only
+    real data is added to whitelists.
+    """
     c = Counter()
     files = sorted(REVIEWED_DIR.glob("*.json"))
     for p in files:
@@ -35,7 +73,9 @@ def find_candidates(field: str, threshold: int = 3):
                 else:
                     # For other fields, just use the value as-is
                     name = new
-                if name:
+                
+                # Only count valid values (filter out N/A, null, dashes, etc.)
+                if name and _is_valid_value(str(name)):
                     c[str(name).upper()] += 1
     return c
 

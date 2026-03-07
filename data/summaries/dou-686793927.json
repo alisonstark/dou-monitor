@@ -1,0 +1,38 @@
+{
+  "metadata": {
+    "orgao": "Órgão: Ministério da Educação/Fundação Universidade Federal de São João Del Rei/Pró-Reitoria de Gestão e Desenvolvimento de Pessoas",
+    "edital_numero": "10 DE FEVEREIRO DE 2026",
+    "cargo": "Professor",
+    "banca": {
+      "nome": "FCC",
+      "tipo": "externa",
+      "confianca_extracao": 0.98
+    },
+    "data_publicacao_dou": null
+  },
+  "vagas": {
+    "total": 6,
+    "ampla_concorrencia": null,
+    "pcd": null,
+    "ppiq": 3
+  },
+  "financeiro": {
+    "taxa_inscricao": "R$ 124,38",
+    "remuneracao_inicial": null
+  },
+  "cronograma": {
+    "inscricao_inicio": "2026-02-20",
+    "inscricao_fim": "2026-03-22",
+    "isencao_inicio": "2026-02-20",
+    "data_prova": "2026-05-04"
+  },
+  "_source": {
+    "pdf_filename": "edital-de-abertura-de-10-de-fevereiro-de-2026-concurso-publico-para-provimento-de-cargos-de-professor-da-carreira-de-magisterio-superior-686793927.pdf",
+    "document_id": "686793927",
+    "canonical_summary": "dou-686793927.json",
+    "migrated_at": "2026-03-06T22:17:14Z",
+    "url_title": "edital-de-abertura-de-10-de-fevereiro-de-2026-concurso-publico-para-provimento-de-cargos-de-professor-da-carreira-de-magisterio-superior-686793927",
+    "url_title_resolved_at": "2026-03-07T10:45:45.112218",
+    "url_title_resolved_by": "cli_backfill_pdf_filename"
+  }
+}

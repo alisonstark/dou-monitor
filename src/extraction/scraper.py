@@ -5,6 +5,12 @@ import re
 import requests
 import time
 
+try:
+    from src.config.dou_urls import get_dou_config
+except ModuleNotFoundError:
+    # Support running from `python src/main.py` where `src` isn't a package root in sys.path.
+    from config.dou_urls import get_dou_config
+
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -13,6 +19,54 @@ HEADERS = {
     'Connection': 'keep-alive',
     'Upgrade-Insecure-Requests': '1'
 }
+
+
+def resolve_url_title_by_document_id(document_id: str, do_type: str = 'do3') -> str | None:
+    """
+    Resolve DOU `url_title` using a legacy `document_id`.
+
+    This is a fallback path for migrated summaries that don't have `_source.url_title`.
+    Returns the matched `urlTitle` when possible, otherwise `None`.
+    """
+    doc_id = (document_id or "").strip()
+    if not doc_id:
+        return None
+
+    dou_config = get_dou_config()
+    search_base_url = dou_config.get_search_url()
+    url = f"{search_base_url}?q={doc_id}&s={do_type}&sortType=0"
+
+    try:
+        response = requests.get(url, headers=HEADERS, timeout=20)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        params_script = soup.find('script', {'id': '_br_com_seatecnologia_in_buscadou_BuscaDouPortlet_params'})
+        if not params_script or not params_script.string:
+            return None
+
+        data = json.loads(params_script.string)
+        results = data.get('jsonArray', [])
+        first_url_title = None
+        for result in results:
+            url_title = (result.get('urlTitle') or '').strip()
+            if not url_title:
+                continue
+
+            if first_url_title is None:
+                first_url_title = url_title
+
+            result_doc_id = str(
+                result.get('documentId')
+                or result.get('document_id')
+                or result.get('id')
+                or ''
+            ).strip()
+            if result_doc_id and result_doc_id == doc_id:
+                return url_title
+
+        return first_url_title
+    except Exception:
+        return None
 
 
 def scrape_concursos(start_date, end_date, do_type='do3') -> list[dict]:
@@ -25,9 +79,13 @@ def scrape_concursos(start_date, end_date, do_type='do3') -> list[dict]:
     Returns:
         - A list of dictionaries containing information about each concurso found, including title, date, edition, section, and URL.
     """
-
+    
+    # Use configured DOU URL (resilient to future changes)
+    dou_config = get_dou_config()
+    search_base_url = dou_config.get_search_url()
+    
     url = (
-        "https://www.in.gov.br/consulta/-/buscar/dou"
+        f"{search_base_url}"
         f"?q=title_pt_BR-concurso&s={do_type}"
         f"&exactDate=personalizado&sortType=0&publishFrom={start_date}&publishTo={end_date}"
     )
@@ -48,10 +106,12 @@ def scrape_concursos(start_date, end_date, do_type='do3') -> list[dict]:
                     time.sleep(wait_time)
                 else:
                     print(f"Server error ({response.status_code}) persisted after {max_retries} attempts")
+                    dou_config.record_component_failure("search")
                     return []
             else:
                 # Don't retry on client errors (4xx)
                 print(f"Client error ({response.status_code}): {e}")
+                dou_config.record_component_failure("search")
                 return []
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
             if attempt < max_retries - 1:
@@ -60,6 +120,7 @@ def scrape_concursos(start_date, end_date, do_type='do3') -> list[dict]:
                 time.sleep(wait_time)
             else:
                 print(f"Failed after {max_retries} attempts: {e}")
+                dou_config.record_component_failure("search")
                 return []
 
     soup = BeautifulSoup(response.text, 'html.parser')
@@ -70,6 +131,7 @@ def scrape_concursos(start_date, end_date, do_type='do3') -> list[dict]:
 
     if not params_script:
         print("Error: Could not find results JSON in page")
+        dou_config.record_component_failure("search")
         return []
 
     # Parse the JSON data
@@ -90,8 +152,9 @@ def scrape_concursos(start_date, end_date, do_type='do3') -> list[dict]:
             edition = result.get('editionNumber', '')
             pub_name = result.get('pubName', '')
 
-            # Construct the full URL
-            full_url = f"https://www.in.gov.br/web/dou/-/{url_title}"
+            # Construct the full URL using configured pattern
+            dou_config = get_dou_config()
+            full_url = dou_config.get_document_url(url_title)
 
             concursos.append({
                 'url': full_url,
@@ -102,8 +165,10 @@ def scrape_concursos(start_date, end_date, do_type='do3') -> list[dict]:
                 'url_title': url_title
             })
 
+        dou_config.record_component_success("search")
         return concursos
 
     except json.JSONDecodeError as e:
         print(f"Error parsing JSON: {e}")
+        dou_config.record_component_failure("search")
         return []

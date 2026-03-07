@@ -3,6 +3,8 @@ import os
 import secrets
 import logging
 import random
+import json
+import re
 from datetime import datetime, timedelta
 from logging.handlers import RotatingFileHandler
 
@@ -11,9 +13,10 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
-from flask import Flask, abort, flash, jsonify, redirect, render_template, request, send_from_directory, session, url_for
+from flask import Flask, abort, after_this_request, flash, jsonify, redirect, render_template, request, send_file, session, url_for
 from flask_wtf.csrf import CSRFProtect
 from flask_login import login_user, logout_user, login_required, current_user
+from werkzeug.exceptions import HTTPException
 
 from .auth import login_manager, verify_credentials, User
 from .security import validate_filename, validate_email, is_safe_url
@@ -368,6 +371,30 @@ def create_app(summaries_dir: Path | None = None, config_path: Path | None = Non
         last_update = get_last_update_time(active_summaries_dir)
         
         api_url = url_for("notices_api", **request.args.to_dict(flat=True))
+        
+        # Load DOU URL configuration for admin UI
+        from src.config.dou_urls import get_dou_config
+        dou_config = get_dou_config()
+        dou_urls = {
+            "base_url": dou_config.get_base_url(),
+            "search_url": dou_config.get_search_url(),
+            "document_url_pattern": dou_config.config.get("document_url_pattern", "")
+        }
+        dou_health = dou_config.get_health_status()
+        dou_health_components = dou_health.get("components", {}) if isinstance(dou_health, dict) else {}
+        dou_health_alerts = []
+        for component_name, component_health in dou_health_components.items():
+            failures = component_health.get("consecutive_failures", 0)
+            threshold = component_health.get("alert_threshold", 3)
+            if failures >= threshold:
+                dou_health_alerts.append(
+                    {
+                        "component": component_name,
+                        "failures": failures,
+                        "threshold": threshold,
+                        "last_failure": component_health.get("last_failure"),
+                    }
+                )
 
         return render_template(
             "dashboard.html",
@@ -385,6 +412,10 @@ def create_app(summaries_dir: Path | None = None, config_path: Path | None = Non
             edit_record=edit_record,
             current_query=request.query_string.decode("utf-8"),
             cancel_edit_url=cancel_edit_url,
+            dou_urls=dou_urls,
+            dou_health=dou_health,
+            dou_health_components=dou_health_components,
+            dou_health_alerts=dou_health_alerts,
         )
 
     @app.get("/api/notices")
@@ -474,31 +505,89 @@ def create_app(summaries_dir: Path | None = None, config_path: Path | None = Non
     @login_required
     def run_manual():
         days_raw = request.form.get("days", "7")
-        export_pdf = request.form.get("export_pdf") == "on"
         days = _parse_positive_int(days_raw, 7)
         
         # 🔒 SECURITY: Log manual execution
-        app.logger.info(f"Manual execution: user={current_user.id} days={days} export_pdf={export_pdf} ip={request.remote_addr}")
+        app.logger.info(f"Manual execution: user={current_user.id} days={days} ip={request.remote_addr}")
         
-        result = run_manual_monitoring(BASE_DIR, days, export_pdf)
+        # Always use export_pdf=False (PDFs are downloaded on-demand from DOU)
+        result = run_manual_monitoring(BASE_DIR, days, export_pdf=False)
         
         if result["success"]:
-            if export_pdf:
-                msg = f"✅ Processamento concluído! {result['processed']} summaries atualizados em data/summaries/. "
-                msg += f"PDFs salvos em editais/: {result.get('saved_pdfs', 0)}. "
-                msg += f"Total encontrado: {result['total_concursos']} ({result['abertura_concursos']} aberturas, {result['outros_concursos']} outros). "
-                if result['errors'] > 0:
-                    msg += f"⚠️ {result['errors']} erro(s). "
-                msg += "Atualize a página para visualizar."
-                flash(msg, "success")
-            else:
-                msg = f"🔍 Busca concluída: {result['total_concursos']} concursos encontrados "
-                msg += f"({result['abertura_concursos']} aberturas, {result['outros_concursos']} outros). "
-                msg += f"Summaries extraídos/atualizados: {result['processed']}. "
-                msg += "PDFs não foram persistidos em disco (modo temporário)."
+            msg = f"🔍 Busca concluída: {result['total_concursos']} concursos encontrados "
+            msg += f"({result['abertura_concursos']} aberturas, {result['outros_concursos']} outros). "
+            msg += f"Summaries extraídos/atualizados: {result['processed']}. "
+            msg += "PDFs disponíveis para download on-demand do DOU."
+            if result['errors'] > 0:
+                msg += f" ⚠️ {result['errors']} erro(s)."
                 flash(msg, "warning")
         else:
             flash(f"Erro: {result['error_message']}", "error")
+        
+        return redirect(url_for("index"))
+    
+    @app.post("/update-dou-urls")
+    @login_required
+    def update_dou_urls():
+        """Admin function to update DOU URL configuration"""
+        base_url = request.form.get("base_url", "").strip()
+        search_url = request.form.get("search_url", "").strip()
+        document_url_pattern = request.form.get("document_url_pattern", "").strip()
+        search_threshold_raw = request.form.get("search_threshold", "").strip()
+        processing_threshold_raw = request.form.get("processing_threshold", "").strip()
+        pdf_download_threshold_raw = request.form.get("pdf_download_threshold", "").strip()
+        
+        if not all([base_url, search_url, document_url_pattern]):
+            flash("Erro: Todos os campos de URL são obrigatórios", "error")
+            return redirect(url_for("index"))
+        
+        # 🔒 SECURITY: Log URL updates (admin action)
+        app.logger.info(f"DOU URLs update requested: user={current_user.id} ip={request.remote_addr}")
+        
+        from src.config.dou_urls import get_dou_config
+        dou_config = get_dou_config()
+
+        def _parse_threshold(raw: str, label: str) -> int | None:
+            if raw == "":
+                return None
+            if not raw.isdigit():
+                raise ValueError(f"{label} deve ser um inteiro positivo")
+            value = int(raw)
+            if value < 1:
+                raise ValueError(f"{label} deve ser >= 1")
+            return value
+
+        try:
+            search_threshold = _parse_threshold(search_threshold_raw, "Limiar de busca")
+            processing_threshold = _parse_threshold(processing_threshold_raw, "Limiar de processamento")
+            pdf_download_threshold = _parse_threshold(pdf_download_threshold_raw, "Limiar de download PDF")
+        except ValueError as e:
+            flash(f"❌ {str(e)}", "error")
+            return redirect(url_for("index"))
+        
+        success, message = dou_config.update_urls(
+            base_url=base_url,
+            search_url=search_url,
+            document_url_pattern=document_url_pattern,
+            updated_by=current_user.id
+        )
+
+        if success:
+            success, threshold_message = dou_config.update_alert_thresholds(
+                search_threshold=search_threshold,
+                processing_threshold=processing_threshold,
+                pdf_download_threshold=pdf_download_threshold,
+                updated_by=current_user.id,
+            )
+            if not success:
+                message = f"URLs atualizadas, mas houve erro nos limiares: {threshold_message}"
+        
+        if success:
+            app.logger.info(f"DOU URLs updated successfully by user={current_user.id}")
+            flash(f"✅ {message}", "success")
+        else:
+            app.logger.error(f"Failed to update DOU URLs: {message}")
+            flash(f"❌ {message}", "error")
         
         return redirect(url_for("index"))
 
@@ -546,41 +635,182 @@ def create_app(summaries_dir: Path | None = None, config_path: Path | None = Non
             return redirect(url_for("index") + f"?{safe_query}")
         return redirect(url_for("index"))
 
-    @app.get("/editais/<filename>")
+    @app.get("/download-pdf/<summary_id>")
     @login_required
-    def serve_edital(filename):
-        """Serve PDF files from the editais/ directory with path traversal protection"""
-        # 🔒 SECURITY: Validate filename to prevent path traversal
-        is_valid, error_msg = validate_filename(filename)
-        if not is_valid:
-            app.logger.warning(f"Path traversal attempt: file={filename} user={current_user.id} ip={request.remote_addr}")
-            abort(400, f"Invalid filename: {error_msg}")
+    def download_pdf_from_dou(summary_id):
+        """Download PDF from DOU on-demand and serve it (streaming, no cache)"""
+        # Validate summary_id format (should be like dou-123456789)
+        if not re.match(r'^dou-\d+$', summary_id):
+            abort(400, "Invalid summary ID format")
         
-        # Validate extension
-        if not filename.lower().endswith('.pdf'):
-            abort(400, "Only PDF files allowed")
+        # Load summary to get DOU URL
+        summary_path = active_summaries_dir / f"{summary_id}.json"
+        if not summary_path.exists():
+            app.logger.warning(f"Summary not found for PDF download: {summary_id}")
+            abort(404, "Summary not found")
         
-        editais_dir = BASE_DIR / "editais"
-        full_path = editais_dir / filename
-        
-        # Ensure resolved path is within editais_dir
         try:
-            editais_dir_resolved = editais_dir.resolve()
-            full_path_resolved = full_path.resolve()
+            with summary_path.open("r", encoding="utf-8") as f:
+                data = json.load(f)
             
-            if not str(full_path_resolved).startswith(str(editais_dir_resolved)):
-                app.logger.warning(f"Path traversal blocked: {filename} user={current_user.id}")
-                abort(403, "Access denied")
+            source_meta = data.get("_source", {})
+
+            # Use configured DOU URL pattern
+            from src.config.dou_urls import get_dou_config
+            dou_config = get_dou_config()
+
+            # Candidate titles for legacy/migrated files that may not have _source.url_title.
+            url_title = (source_meta.get("url_title") or "").strip()
+            pdf_filename = (source_meta.get("pdf_filename") or "").strip()
+            canonical_summary = (source_meta.get("canonical_summary") or "").strip()
+            document_id = str(source_meta.get("document_id") or "").strip()
+            resolved_title_by_document_id = ""
+
+            candidate_titles = []
+            if url_title:
+                candidate_titles.append(url_title)
+            if pdf_filename:
+                candidate_titles.append(Path(pdf_filename).stem)
+            if canonical_summary:
+                candidate_titles.append(Path(canonical_summary).stem)
+
+            # Extra fallback: resolve url_title from legacy document_id.
+            if document_id:
+                try:
+                    from src.extraction.scraper import resolve_url_title_by_document_id
+                    resolved_title = resolve_url_title_by_document_id(document_id)
+                    if resolved_title:
+                        resolved_title_by_document_id = resolved_title.strip()
+                        candidate_titles.append(resolved_title)
+                except Exception as resolver_error:
+                    app.logger.warning(
+                        f"Failed to resolve url_title by document_id={document_id} for {summary_id}: {resolver_error}"
+                    )
+
+            # Keep order and remove duplicates/empties.
+            normalized_candidates = []
+            seen = set()
+            for candidate in candidate_titles:
+                value = candidate.strip()
+                if value and value not in seen:
+                    seen.add(value)
+                    normalized_candidates.append(value)
+
+            if not normalized_candidates:
+                app.logger.warning(f"No URL metadata in summary {summary_id}")
+                abort(404, "DOU URL metadata not available for this document")
             
-            if not full_path_resolved.exists():
-                abort(404, "File not found")
-        
+        except HTTPException:
+            raise
         except Exception as e:
-            app.logger.error(f"Error serving file {filename}: {e}")
-            abort(500, "Internal server error")
+            app.logger.error(f"Error loading summary {summary_id}: {e}")
+            abort(500, "Error loading document metadata")
         
-        app.logger.info(f"PDF download: file={filename} user={current_user.id} ip={request.remote_addr}")
-        return send_from_directory(editais_dir, filename)
+        # Import PDF export here (lazy import to avoid circular deps)
+        try:
+            from src.export.pdf_export import save_concurso_pdf
+            import tempfile
+            
+            # Download to temporary file (will be cleaned up after serving)
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+                tmp_path = tmp_file.name
+            
+            app.logger.info(f"Downloading PDF from DOU: {summary_id} user={current_user.id}")
+
+            last_result = ""
+            chosen_title = ""
+            for candidate_title in normalized_candidates:
+                dou_url = dou_config.get_document_url(candidate_title)
+                concurso_data = {'url': dou_url, 'url_title': candidate_title}
+                last_result = save_concurso_pdf(concurso_data, output_path=tmp_path)
+                if isinstance(last_result, str) and last_result.startswith("Content saved"):
+                    chosen_title = candidate_title
+                    break
+
+            if not (isinstance(last_result, str) and last_result.startswith("Content saved")):
+                # Record failure for health monitoring
+                alert_needed = dou_config.record_component_failure("pdf_download")
+                if alert_needed:
+                    flash("⚠️ ALERTA: Múltiplas falhas consecutivas ao baixar PDFs do DOU. A URL pode ter mudado!", "danger")
+
+                app.logger.error(
+                    f"PDF download failed for {summary_id}. Candidates tried={normalized_candidates}. Last result={last_result}"
+                )
+                abort(500, "Failed to download PDF from DOU using available URL metadata")
+            
+            # Record success
+            dou_config.record_component_success("pdf_download")
+
+            # Persist resolved url_title when legacy document_id fallback was used successfully.
+            if (
+                not url_title
+                and resolved_title_by_document_id
+                and chosen_title == resolved_title_by_document_id
+            ):
+                try:
+                    source_meta["url_title"] = resolved_title_by_document_id
+                    source_meta["url_title_resolved_at"] = datetime.now().isoformat()
+                    source_meta["url_title_resolved_by"] = "document_id_fallback"
+                    with summary_path.open("w", encoding="utf-8") as f:
+                        json.dump(data, f, ensure_ascii=False, indent=2)
+                    app.logger.info(
+                        f"Persisted url_title for {summary_id}: {resolved_title_by_document_id}"
+                    )
+                except Exception as persist_error:
+                    app.logger.warning(
+                        f"Could not persist resolved url_title for {summary_id}: {persist_error}"
+                    )
+            
+            # Serve the temporary file
+            app.logger.info(
+                f"PDF served: {summary_id} user={current_user.id} title_source={chosen_title or normalized_candidates[0]}"
+            )
+            
+            @after_this_request
+            def cleanup(response):
+                try:
+                    os.unlink(tmp_path)
+                except Exception:
+                    pass
+                return response
+            
+            return send_file(
+                tmp_path,
+                mimetype='application/pdf',
+                as_attachment=True,
+                download_name=f"{summary_id}.pdf"
+            )
+            
+        except Exception as e:
+            app.logger.error(f"Error downloading PDF from DOU: {e}")
+            abort(500, f"Error downloading PDF: {str(e)}")
+
+    # Error handlers
+    @app.errorhandler(404)
+    def not_found_error(error):
+        """Handle 404 errors with user-friendly message"""
+        if request.path.startswith('/editais/'):
+            message = "PDF não encontrado. Este arquivo pode ter sido extraído temporariamente sem persistência."
+        else:
+            message = str(error.description) if hasattr(error, 'description') else "Página não encontrada"
+        
+        return render_template(
+            "error.html",
+            error_code=404,
+            error_title="Não Encontrado",
+            error_message=message
+        ), 404
+
+    @app.errorhandler(500)
+    def internal_error(error):
+        """Handle 500 errors"""
+        app.logger.error(f"Internal server error: {error}")
+        return render_template(
+            "error.html",
+            error_code=500,
+            error_title="Erro Interno do Servidor",
+            error_message="Ocorreu um erro ao processar sua solicitação. Tente novamente mais tarde."
+        ), 500
 
     return app
 

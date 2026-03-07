@@ -11,6 +11,6 @@
     "threshold": 1,
     "email_to": "",
     "webhook_url": "",
-    "desktop_enabled": true
+    "desktop_enabled": false
   }
 }

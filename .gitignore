@@ -11,15 +11,14 @@ __pycache__/
 secrets/
 logs/
 
-# Data files
+# Data files - Versionar summaries (essencial para dashboard e histórico)
 data/backups/
-data/summaries/
 data/review_*.csv
+data/dou_config.json
 src/cronograma_parser.py.backup
 outros/
 MELHORIAS_PARSER.md
 editais/*.pdf
-summaries/*.json
 tests/TEST_SUMMARY.md
 productization_plan.md
 saas_strategy_personal.md

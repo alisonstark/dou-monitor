@@ -224,17 +224,66 @@
         <label>Dias de busca
           <input type="number" min="1" step="1" name="days" value="{{ config.filters.default_days }}" />
         </label>
-        <label class="check">
-          <input type="checkbox" name="export_pdf" id="export_pdf" />
-          <strong>Salvar PDFs no disco (opcional)</strong>
-        </label>
         <div class="actions">
           <button type="submit" class="primary">Realizar Busca</button>
         </div>
       </form>
       <p class="hint">
         <small>📋 Sempre processa TODOS os concursos (aberturas + outros editais) e atualiza data/summaries/.</small><br/>
-        <small>💾 Marque a opção acima apenas se quiser manter os PDFs em editais/ para download posterior.</small>
+        <small>💾 PDFs são baixados on-demand diretamente do DOU (não salvos localmente).</small>
+      </p>
+      
+      <h3 style="margin-top: 1.5rem;">🌐 Configuração de URLs do DOU</h3>
+      <p style="color: var(--muted); margin-bottom: 0.5rem;">
+        <small>⚠️ <strong>Administrador:</strong> Altere estas URLs apenas se o DOU mudar seu formato de endereços.</small>
+      </p>
+      {% if dou_health_alerts %}
+      <div style="background: var(--danger); color: white; padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem;">
+        <strong>⚠️ ALERTA DE SAÚDE DOU:</strong> Falhas consecutivas atingiram o limite em:
+        {% for alert in dou_health_alerts %}
+          <br><small>- {{ alert.component }}: {{ alert.failures }} falhas (limite {{ alert.threshold }}){% if alert.last_failure %} | última: {{ alert.last_failure }}{% endif %}</small>
+        {% endfor %}
+        <br><small>Verifique o formato de URL do DOU e o fluxo de scraping/processamento.</small>
+      </div>
+      {% endif %}
+      <form method="post" action="{{ url_for('update_dou_urls') }}" class="grid-form" autocomplete="off">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+        <label>URL de Busca
+          <input type="url" name="search_url" value="{{ dou_urls.search_url }}" placeholder="https://www.in.gov.br/consulta/-/buscar/dou" required />
+          <small>URL base para buscar concursos no DOU</small>
+        </label>
+        <label>Padrão de URL de Documentos
+          <input type="text" name="document_url_pattern" value="{{ dou_urls.document_url_pattern }}" placeholder="https://www.in.gov.br/web/dou/-/{url_title}" required />
+          <small>Use <code>{url_title}</code> como placeholder para o identificador do documento</small>
+        </label>
+        <label>URL Base (Fallback)
+          <input type="url" name="base_url" value="{{ dou_urls.base_url }}" placeholder="https://www.in.gov.br" required />
+          <small>Domínio principal do DOU</small>
+        </label>
+        <label>Limiar de alerta - Busca
+          <input type="number" min="1" step="1" name="search_threshold" value="{{ dou_health_components.search.alert_threshold if dou_health_components.search else 3 }}" required />
+          <small>Número de falhas consecutivas em busca para disparar alerta</small>
+        </label>
+        <label>Limiar de alerta - Processamento
+          <input type="number" min="1" step="1" name="processing_threshold" value="{{ dou_health_components.processing.alert_threshold if dou_health_components.processing else 3 }}" required />
+          <small>Número de falhas consecutivas em processamento para disparar alerta</small>
+        </label>
+        <label>Limiar de alerta - Download PDF
+          <input type="number" min="1" step="1" name="pdf_download_threshold" value="{{ dou_health_components.pdf_download.alert_threshold if dou_health_components.pdf_download else 3 }}" required />
+          <small>Número de falhas consecutivas em download PDF para disparar alerta</small>
+        </label>
+        <div class="actions">
+          <button type="submit" class="secondary">Salvar URLs e Limiares</button>
+        </div>
+      </form>
+      <p class="hint">
+        <small>📊 Status por componente:</small><br/>
+        <small>
+          busca={{ dou_health_components.search.consecutive_failures if dou_health_components.search else 0 }} falhas consecutivas,
+          processamento={{ dou_health_components.processing.consecutive_failures if dou_health_components.processing else 0 }},
+          download_pdf={{ dou_health_components.pdf_download.consecutive_failures if dou_health_components.pdf_download else 0 }}
+          | limiares: busca={{ dou_health_components.search.alert_threshold if dou_health_components.search else 3 }}, processamento={{ dou_health_components.processing.alert_threshold if dou_health_components.processing else 3 }}, download_pdf={{ dou_health_components.pdf_download.alert_threshold if dou_health_components.pdf_download else 3 }}
+        </small>
       </p>
     </details>
 
@@ -293,11 +342,7 @@
                 </td>
                 <td>
                   <div class="action-btns">
-                    {% if rec.pdf_filename %}
-                      <a href="/editais/{{ rec.pdf_filename }}" class="ghost-sm" target="_blank" rel="noopener" title="Baixar PDF">📄</a>
-                    {% else %}
-                      <span class="ghost-sm" title="PDF não salvo">—</span>
-                    {% endif %}
+                    <a href="/download-pdf/{{ rec.id }}" class="ghost-sm" target="_blank" rel="noopener" title="Baixar PDF do DOU (com fallback)">📥</a>
                     <a href="{{ url_with_updates(edit=rec.file_name) }}" class="ghost-sm" title="Editar (MIT)">✏️</a>
                   </div>
                 </td>
@@ -378,11 +423,7 @@
                 </td>
                 <td>
                   <div class="action-btns">
-                    {% if rec.pdf_filename %}
-                      <a href="/editais/{{ rec.pdf_filename }}" class="ghost-sm" target="_blank" rel="noopener" title="Baixar PDF">📄</a>
-                    {% else %}
-                      <span class="ghost-sm" title="PDF não salvo">—</span>
-                    {% endif %}
+                    <a href="/download-pdf/{{ rec.id }}" class="ghost-sm" target="_blank" rel="noopener" title="Baixar PDF do DOU (com fallback)">📥</a>
                     <a href="{{ url_with_updates(edit=rec.file_name) }}" class="ghost-sm" title="Editar (MIT)">✏️</a>
                   </div>
                 </td>

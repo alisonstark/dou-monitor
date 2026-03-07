@@ -1,0 +1,37 @@
+{
+  "metadata": {
+    "orgao": "Órgão: Entidades de Fiscalização do Exercício das Profissões Liberais/CONSELHO REGIONAL DOS REPRESENTANTES COMERCIAIS DO ESTADO DO ESPÍRITO SANTO",
+    "edital_numero": null,
+    "cargo": null,
+    "banca": {
+      "nome": null,
+      "tipo": null,
+      "confianca_extracao": 0.0
+    },
+    "data_publicacao_dou": null
+  },
+  "vagas": {
+    "total": null,
+    "ampla_concorrencia": null,
+    "pcd": null,
+    "ppiq": null
+  },
+  "financeiro": {
+    "taxa_inscricao": null,
+    "remuneracao_inicial": null
+  },
+  "cronograma": {
+    "inscricao_inicio": null,
+    "inscricao_fim": null,
+    "isencao_inicio": null,
+    "data_prova": null
+  },
+  "_source": {
+    "pdf_filename": null,
+    "pdf_persisted": false,
+    "url_title": "edital-de-3-de-marco-de-2026convocacao-de-candidatos-do-concurso-publico-edital-n-1/2023-690469030",
+    "document_id": "690469030",
+    "canonical_summary": "dou-690469030.json",
+    "extracted_at": "2026-03-06T22:58:38Z"
+  }
+}

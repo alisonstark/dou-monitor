@@ -42,7 +42,7 @@ def load_dashboard_config(config_path: Path) -> Dict[str, Any]:
             "threshold": 1,
             "email_to": "",
             "webhook_url": "",
-            "desktop_enabled": True,
+            "desktop_enabled": False,
         },
     }
 
@@ -107,16 +107,27 @@ def load_summaries(summaries_dir: Path) -> List[Dict[str, Any]]:
             financeiro = data.get("financeiro", {})
             review_meta = data.get("_review", {})
             source_meta = data.get("_source", {}) if isinstance(data.get("_source"), dict) else {}
-            if "pdf_filename" in source_meta:
-                pdf_filename = _safe_text(source_meta.get("pdf_filename"))
+            
+            # Get DOU URL for on-demand download (using configured pattern)
+            url_title = _safe_text(source_meta.get("url_title"))
+            if url_title:
+                from src.config.dou_urls import get_dou_config
+                dou_config = get_dou_config()
+                dou_url = dou_config.get_document_url(url_title)
             else:
-                pdf_filename = f"{file_path.stem}.pdf"
+                dou_url = None
+            
+            # For categorization, use url_title or fallback to pdf_filename (for migrated records)
+            # pdf_filename exists in _source for legacy/migrated records
+            title_for_categorization = url_title or _safe_text(source_meta.get("pdf_filename"))
 
             records.append(
                 {
                     "id": file_path.stem,
                     "file_name": file_path.name,
-                    "pdf_filename": pdf_filename,
+                    "dou_url": dou_url,  # For on-demand download from DOU
+                    "url_title": url_title,  # Real URL title from DOU
+                    "title_for_categorization": title_for_categorization,  # Title or pdf_filename fallback
                     "orgao": _safe_text(metadata.get("orgao")),
                     "edital_numero": _safe_text(metadata.get("edital_numero")),
                     "cargo": _safe_text(metadata.get("cargo")),
@@ -199,8 +210,8 @@ def categorize_notices(records: List[Dict[str, Any]]) -> Dict[str, List[Dict[str
     outros = []
     
     for rec in records:
-        # Check in filename and orgao field (which often contains the title)
-        text_to_check = f"{rec.get('file_name', '')} {rec.get('orgao', '')}"
+        # Check in filename, orgao, and title (DOU url_title or pdf_filename fallback)
+        text_to_check = f"{rec.get('file_name', '')} {rec.get('orgao', '')} {rec.get('title_for_categorization', '')}"
         normalized = _normalize(text_to_check)
         
         if any(keyword in normalized for keyword in abertura_keywords):
@@ -432,6 +443,8 @@ def run_manual_monitoring(project_root: Path, days: int, export_pdf: bool = Fals
         
         from extraction.scraper import scrape_concursos
         from extraction.extractor import save_extraction_json
+        from src.config.dou_urls import get_dou_config
+        dou_config = get_dou_config()
         
         # Calculate date range
         end_date = datetime.today().strftime('%d-%m-%Y')
@@ -513,10 +526,21 @@ def run_manual_monitoring(project_root: Path, days: int, export_pdf: bool = Fals
             except ImportError:
                 result["error_message"] = "PDF export unavailable (Playwright not installed)"
                 result["errors"] += 1
+
+        # Processing-stage health monitoring (covers PDF extraction + summary pipeline).
+        if result["errors"] > 0:
+            dou_config.record_component_failure("processing")
+        else:
+            dou_config.record_component_success("processing")
         
         return result
         
     except Exception as e:
+        try:
+            from src.config.dou_urls import get_dou_config
+            get_dou_config().record_component_failure("processing")
+        except Exception:
+            pass
         return {
             "success": False,
             "total_concursos": 0,
