@@ -240,6 +240,18 @@ python src/main.py -d 30 --export-pdf
 |-------|--------|-----------|--------|
 | `--export-pdf` | - | Salvar PDFs de qualidade de impressão e extrair resumos JSON | Desativado |
 | `--days` | `-d` | Janela de retrospectiva em dias | 7 |
+| `--backfill-url-titles` | - | Repara `_source.url_title` ausente/legado em `data/summaries` | Desativado |
+| `--dry-run` | - | Simula backfill sem gravar arquivos (uso com `--backfill-url-titles`) | Desativado |
+| `--backfill-limit` | - | Limita quantidade de summaries no backfill (`0` = sem limite) | 0 |
+
+**Reparo em lote de URLs legadas do DOU:**
+```bash
+# Simular reparos sem alterar arquivos
+python src/main.py --backfill-url-titles --dry-run
+
+# Aplicar reparos
+python src/main.py --backfill-url-titles
+```
 
 ### Saída Esperada
 
@@ -437,6 +449,14 @@ O dashboard organiza os concursos em duas categorias:
 - **Outros Editais e Concursos**: Demais editais que podem conter informações relevantes mas não foram identificados como aberturas
 
 Cada concurso exibe link direto para **baixar o PDF do edital** diretamente no navegador.
+
+### Robustez de URL do DOU (auto-healing)
+
+O sistema aplica estratégias de recuperação quando encontra metadados legados ou inconsistentes:
+- Detecta slugs inválidos (ex.: `2025-687495896`) e evita gerar PDF de página de erro.
+- Reconstrói slugs legados truncados quando possível (ex.: `edital-n-1/2025-de-...`) usando `metadata.edital_numero`.
+- Tenta resolução por `document_id` em múltiplas seções (`do1`, `do2`, `do3`).
+- No front-end, se o download automático falhar, abre fallback para busca no DOU por `document_id`.
 
 #### Configuração Avançada
 Para necessidades específicas, use "Configuração Avançada de Busca":

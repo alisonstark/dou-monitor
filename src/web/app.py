@@ -36,6 +36,10 @@ from .dashboard_service import (
     sort_summaries,
     summarize_metrics,
 )
+from src.utils.dou_url_utils import (
+    is_invalid_year_number_slug,
+    rebuild_legacy_slug,
+)
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 DEFAULT_SUMMARIES_DIR = BASE_DIR / "data" / "summaries"
@@ -664,26 +668,6 @@ def create_app(summaries_dir: Path | None = None, config_path: Path | None = Non
     @login_required
     def download_pdf_from_dou(summary_id):
         """Download PDF from DOU on-demand and serve it (streaming, no cache)"""
-        def rebuild_legacy_url_title(url_title: str, edital_numero: str) -> str | None:
-            """Try to rebuild known legacy-truncated slug using edital number.
-
-            Example: 2025-de-23-de-fevereiro-... + 1/2025 -> edital-n-1/2025-de-23-de-fevereiro-...
-            """
-            title = (url_title or "").strip()
-            edital = (edital_numero or "").strip().lower()
-            if not re.match(r"^\d{4}-de-.*-\d+$", title):
-                return None
-
-            m = re.match(r"^(\d+)\s*/\s*(\d{4})$", edital)
-            if not m:
-                return None
-
-            numero, ano = m.group(1), m.group(2)
-            if not title.startswith(f"{ano}-"):
-                return None
-
-            return f"edital-n-{numero}/{title}"
-
         # Validate summary_id format (should be like dou-123456789)
         if not re.match(r'^dou-\d+$', summary_id):
             abort(400, "Invalid summary ID format")
@@ -715,7 +699,7 @@ def create_app(summaries_dir: Path | None = None, config_path: Path | None = Non
                 abort(404, f"Este documento não está mais disponível no DOU. {error_msg}")
             
             # Validate url_title pattern (should not be just numbers like "2025-687495896")
-            if url_title and re.match(r'^\d{4}-\d+$', url_title):
+            if url_title and is_invalid_year_number_slug(url_title):
                 app.logger.warning(f"PDF download attempted with invalid url_title pattern: {url_title}")
                 abort(404, f"URL inválida detectada. Este documento pode ter sido removido do DOU ou ter metadados incompletos.")
             
@@ -727,7 +711,7 @@ def create_app(summaries_dir: Path | None = None, config_path: Path | None = Non
             candidate_titles = []
             rebuilt_from_legacy = ""
             if url_title:
-                rebuilt = rebuild_legacy_url_title(url_title, str(metadata.get("edital_numero") or ""))
+                rebuilt = rebuild_legacy_slug(url_title, str(metadata.get("edital_numero") or ""))
                 if rebuilt:
                     rebuilt_from_legacy = rebuilt
                     candidate_titles.append(rebuilt)
@@ -735,8 +719,8 @@ def create_app(summaries_dir: Path | None = None, config_path: Path | None = Non
             if pdf_filename:
                 # Skip pdf_filename if it matches invalid pattern
                 stem = Path(pdf_filename).stem
-                if not re.match(r'^\d{4}-\d+$', stem):
-                    rebuilt_stem = rebuild_legacy_url_title(stem, str(metadata.get("edital_numero") or ""))
+                if not is_invalid_year_number_slug(stem):
+                    rebuilt_stem = rebuild_legacy_slug(stem, str(metadata.get("edital_numero") or ""))
                     if rebuilt_stem:
                         candidate_titles.append(rebuilt_stem)
                     candidate_titles.append(stem)

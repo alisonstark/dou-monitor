@@ -1,10 +1,16 @@
 import json
-import re
 import shutil
 from datetime import datetime, timedelta
 from math import ceil
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
+
+from src.utils.dou_url_utils import (
+    is_invalid_year_number_slug,
+    is_legacy_truncated_slug,
+    rebuild_legacy_slug,
+)
+from src.utils.normalization import normalize_text
 
 
 def _safe_text(value: Any) -> str:
@@ -31,31 +37,6 @@ def _parse_optional_int(value: Any) -> int | None:
             return int(float(raw.replace(".", "").replace(",", ".")))
         except ValueError:
             return None
-
-
-def _rebuild_legacy_url_title(url_title: str, edital_numero: str) -> str | None:
-    """Rebuild known legacy-truncated DOU slug using edital number when possible.
-
-    Example:
-    - url_title: 2025-de-23-de-fevereiro-de-2026-concurso-publico-688800849
-    - edital_numero: 1/2025
-    -> edital-n-1/2025-de-23-de-fevereiro-de-2026-concurso-publico-688800849
-    """
-    title = (url_title or "").strip()
-    edital = (edital_numero or "").strip().lower()
-    if not re.match(r"^\d{4}-de-.*-\d+$", title):
-        return None
-
-    m = re.match(r"^(\d+)\s*/\s*(\d{4})$", edital)
-    if not m:
-        return None
-
-    numero, ano = m.group(1), m.group(2)
-    # Only reconstruct when the slug starts with the same edital year.
-    if not title.startswith(f"{ano}-"):
-        return None
-
-    return f"edital-n-{numero}/{title}"
 
 
 def load_dashboard_config(config_path: Path) -> Dict[str, Any]:
@@ -148,15 +129,15 @@ def load_summaries(summaries_dir: Path) -> List[Dict[str, Any]]:
                     url_error = _safe_text(source_meta.get("url_title_error", "PDF não disponível no DOU"))
                     dou_url = None
                 # Check if matches invalid pattern (just year-number)
-                elif re.match(r'^\d{4}-\d+$', url_title):
+                elif is_invalid_year_number_slug(url_title):
                     pdf_unavailable = True
                     url_error = "URL incompleta ou inválida"
                     dou_url = None
                 # Check legacy truncated pattern (starts with year slug and usually misses edital prefix)
-                elif re.match(r'^\d{4}-de-.*-\d+$', url_title):
+                elif is_legacy_truncated_slug(url_title):
                     from src.config.dou_urls import get_dou_config
                     dou_config = get_dou_config()
-                    rebuilt_url_title = _rebuild_legacy_url_title(url_title, edital_numero)
+                    rebuilt_url_title = rebuild_legacy_slug(url_title, edital_numero)
                     if rebuilt_url_title:
                         dou_url = dou_config.get_document_url(rebuilt_url_title)
                     else:
@@ -246,29 +227,21 @@ def get_last_update_time(summaries_dir: Path) -> Dict[str, Any]:
 
 def categorize_notices(records: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
     """
-    Categorize concursos into 'abertura' (opening) and 'outros' (others).
-    
-    Abertura: contains keywords like 'abertura', 'inicio', 'iniciado' in filename or title
-    Outros: other concursos/editais that don't match abertura keywords
+    Categoriza concursos em 'abertura' e 'outros'.
+
+    Abertura: contém palavras-chave como 'abertura', 'inicio', 'iniciado'
+    no nome do arquivo ou no título.
+    Outros: demais concursos/editais que não correspondem às palavras-chave.
     """
-    import unicodedata
-    
-    def _normalize(text: str) -> str:
-        """Remove accents and convert to lowercase"""
-        return "".join(
-            c for c in unicodedata.normalize("NFKD", text)
-            if not unicodedata.combining(c)
-        ).lower()
-    
     abertura_keywords = ["abertura", "inicio", "iniciado"]
     
     abertura = []
     outros = []
     
     for rec in records:
-        # Check in filename, orgao, and title (DOU url_title or pdf_filename fallback)
+        # Verifica no nome do arquivo, órgão e título (url_title ou fallback pdf_filename).
         text_to_check = f"{rec.get('file_name', '')} {rec.get('orgao', '')} {rec.get('title_for_categorization', '')}"
-        normalized = _normalize(text_to_check)
+        normalized = normalize_text(text_to_check)
         
         if any(keyword in normalized for keyword in abertura_keywords):
             abertura.append(rec)

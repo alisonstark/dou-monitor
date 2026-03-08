@@ -1,13 +1,17 @@
 import argparse
 import json
-import re
 from datetime import datetime, timedelta
 from pathlib import Path
 
 from extraction.scraper import scrape_concursos, resolve_url_title_by_document_id
 from extraction.extractor import save_extraction_json
+from utils.dou_url_utils import (
+    is_invalid_year_number_slug,
+    is_legacy_truncated_slug,
+    rebuild_legacy_slug,
+)
+from utils.normalization import normalize_text
 import os
-import unicodedata
 
 
 def parse_args():
@@ -15,93 +19,71 @@ def parse_args():
     parser.add_argument(
         "--export-pdf",
         action="store_true",
-        help="Save results as PDFs using Playwright",
+        help="Salva os resultados em PDF usando Playwright",
     )
     parser.add_argument(
         "--days",
         "-d",
         type=int,
         default=7,
-        help="Number of days to look back (default: 7)",
+        help="Quantidade de dias para busca retroativa (padrão: 7)",
     )
     parser.add_argument(
         "--update-dou-urls",
         action="store_true",
-        help="Update DOU URL configuration (base_url, search_url, document_url_pattern)",
+        help="Atualiza configuração de URLs do DOU (base_url, search_url, document_url_pattern)",
     )
     parser.add_argument(
         "--base-url",
         type=str,
-        help="New DOU base URL (used with --update-dou-urls)",
+        help="Nova URL base do DOU (uso com --update-dou-urls)",
     )
     parser.add_argument(
         "--search-url",
         type=str,
-        help="New DOU search URL (used with --update-dou-urls)",
+        help="Nova URL de busca do DOU (uso com --update-dou-urls)",
     )
     parser.add_argument(
         "--document-url-pattern",
         type=str,
-        help="New DOU document URL pattern with {url_title} placeholder (used with --update-dou-urls)",
+        help="Novo padrão de URL do documento com placeholder {url_title} (uso com --update-dou-urls)",
     )
     parser.add_argument(
         "--search-threshold",
         type=int,
-        help="Alert threshold for search failures (used with --update-dou-urls)",
+        help="Limiar de alerta para falhas de busca (uso com --update-dou-urls)",
     )
     parser.add_argument(
         "--processing-threshold",
         type=int,
-        help="Alert threshold for processing failures (used with --update-dou-urls)",
+        help="Limiar de alerta para falhas de processamento (uso com --update-dou-urls)",
     )
     parser.add_argument(
         "--pdf-download-threshold",
         type=int,
-        help="Alert threshold for PDF download failures (used with --update-dou-urls)",
+        help="Limiar de alerta para falhas de download de PDF (uso com --update-dou-urls)",
     )
     parser.add_argument(
         "--backfill-url-titles",
         action="store_true",
-        help="Backfill missing _source.url_title in data/summaries using document_id lookup",
+        help="Preenche/corrige _source.url_title em data/summaries usando busca por document_id",
     )
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Preview changes without writing files (works with --backfill-url-titles)",
+        help="Mostra alterações sem gravar arquivos (uso com --backfill-url-titles)",
     )
     parser.add_argument(
         "--backfill-limit",
         type=int,
         default=0,
-        help="Maximum number of summaries to process in backfill mode (0 = no limit)",
+        help="Número máximo de summaries no backfill (0 = sem limite)",
     )
     return parser.parse_args()
 
 
 def backfill_url_titles_in_summaries(summaries_dir: Path, dry_run: bool = False, limit: int = 0) -> dict:
     """Resolve and persist missing/legacy _source.url_title for summaries."""
-
-    def _is_invalid_year_number_slug(value: str) -> bool:
-        return bool(re.match(r"^\d{4}-\d+$", value))
-
-    def _is_legacy_truncated_slug(value: str) -> bool:
-        return bool(re.match(r"^\d{4}-de-.*-\d+$", value))
-
-    def _rebuild_legacy_slug(candidate_slug: str, edital_numero: str) -> str | None:
-        """Rebuild slug prefix for legacy cases, e.g. 1/2025 + 2025-de-... -> edital-n-1/2025-de-..."""
-        slug = (candidate_slug or "").strip()
-        edital = (edital_numero or "").strip().lower()
-        if not _is_legacy_truncated_slug(slug):
-            return None
-
-        m = re.match(r"^(\d+)\s*/\s*(\d{4})$", edital)
-        if not m:
-            return None
-
-        numero, ano = m.group(1), m.group(2)
-        if not slug.startswith(f"{ano}-"):
-            return None
-        return f"edital-n-{numero}/{slug}"
 
     def _resolve_by_document_id_any_section(document_id: str) -> str | None:
         for do_type in ("do1", "do2", "do3"):
@@ -145,7 +127,7 @@ def backfill_url_titles_in_summaries(summaries_dir: Path, dry_run: bool = False,
             if not url_title:
                 stats["missing"] += 1
                 needs_repair = True
-            elif _is_legacy_truncated_slug(url_title) or _is_invalid_year_number_slug(url_title):
+            elif is_legacy_truncated_slug(url_title) or is_invalid_year_number_slug(url_title):
                 stats["legacy_truncated"] += 1
                 needs_repair = True
 
@@ -157,8 +139,8 @@ def backfill_url_titles_in_summaries(summaries_dir: Path, dry_run: bool = False,
             resolution_method = None
             edital_numero = str(metadata.get("edital_numero") or "").strip()
 
-            if url_title and _is_legacy_truncated_slug(url_title):
-                rebuilt = _rebuild_legacy_slug(url_title, edital_numero)
+            if url_title and is_legacy_truncated_slug(url_title):
+                rebuilt = rebuild_legacy_slug(url_title, edital_numero)
                 if rebuilt:
                     resolved_title = rebuilt
                     resolution_method = "cli_backfill_legacy_prefix"
@@ -168,12 +150,12 @@ def backfill_url_titles_in_summaries(summaries_dir: Path, dry_run: bool = False,
             pdf_filename = (source_meta.get("pdf_filename") or "").strip()
             if not resolved_title and pdf_filename and pdf_filename.endswith(".pdf"):
                 candidate_title = pdf_filename[:-4]  # Remove .pdf
-                rebuilt_candidate = _rebuild_legacy_slug(candidate_title, edital_numero)
+                rebuilt_candidate = rebuild_legacy_slug(candidate_title, edital_numero)
                 if rebuilt_candidate:
                     resolved_title = rebuilt_candidate
                     resolution_method = "cli_backfill_legacy_prefix_pdf_filename"
                     print(f"HIT  {file_path.name}: reconstruído de pdf_filename legado -> {resolved_title}")
-                elif _is_invalid_year_number_slug(candidate_title) or _is_legacy_truncated_slug(candidate_title):
+                elif is_invalid_year_number_slug(candidate_title) or is_legacy_truncated_slug(candidate_title):
                     print(f"SKIP {file_path.name}: pdf_filename inválido para uso direto -> {candidate_title}")
                 else:
                     resolved_title = candidate_title
@@ -226,33 +208,32 @@ def backfill_url_titles_in_summaries(summaries_dir: Path, dry_run: bool = False,
 
 
 def process_abertura_concursos(abertura_concursos, export_pdf):
-    preview_header_printed = False
     errors = 0
     processed = 0
 
     for concurso in abertura_concursos:
         processed += 1
-        # Always show the title; in preview mode we only display the title
-        print(f"Title:   {concurso['title']}")
+        # Sempre mostra o título; no modo preview não persiste artefatos.
+        print(f"Titulo:  {concurso['title']}")
         if export_pdf:
             try:
-                # Import lazily so preview mode doesn't require Playwright to be installed
+                # Import tardio para não exigir Playwright no modo preview.
                 from export.pdf_export import save_concurso_pdf
             except Exception as e:
                 errors += 1
-                print(f"Error importing Playwright/pdf_export: {e}")
-                print("PDF export unavailable; install Playwright or run without --export-pdf.")
+                print(f"Erro ao importar Playwright/pdf_export: {e}")
+                print("Exportacao de PDF indisponivel; instale o Playwright ou execute sem --export-pdf.")
                 continue
 
             try:
                 result = save_concurso_pdf(concurso)
-                # Check if the result is an error message
+                # Verifica se o resultado retornou mensagem de erro.
                 if isinstance(result, str) and result.startswith("Error"):
                     errors += 1
                     print(result)
                 else:
                     print(result)
-                    # after saving the PDF, attempt extraction to JSON
+                    # Após salvar o PDF, tenta a extração para JSON.
                     try:
                         pdf_path = os.path.join("editais", f"{concurso['url_title']}.pdf")
                         out_json = save_extraction_json(
@@ -261,15 +242,14 @@ def process_abertura_concursos(abertura_concursos, export_pdf):
                             source_pdf_filename=f"{concurso['url_title']}.pdf",
                             pdf_persisted=True,
                         )
-                        print(f"Extraction saved to {out_json}")
+                        print(f"Extracao salva em {out_json}")
                     except Exception as ex:
-                        print(f"Warning: extraction failed: {ex}")
+                        print(f"Aviso: extracao falhou: {ex}")
             except Exception as e:
                 errors += 1
-                print(f"Error accessing URL: {e}")
+                print(f"Erro ao acessar URL: {e}")
         else:
-            # preview mode: keep output minimal (only title)
-            # increment processed count already done; nothing else to fetch here.
+            # No modo preview, mantém saída mínima (somente título).
             pass
         print(f"{'-'*80}\n")
 
@@ -313,7 +293,7 @@ if __name__ == "__main__":
         print("-" * 80 + "\n")
         exit(0)
     
-    # Handle DOU URL configuration update if requested
+    # Atualiza configuração de URLs do DOU quando solicitado.
     if args.update_dou_urls:
         from config.dou_urls import get_dou_config
         
@@ -390,49 +370,40 @@ if __name__ == "__main__":
         
         exit(0)
 
-    # Make end_date today's date, and start_date `args.days` before today's date.
+    # Define intervalo: data final hoje e início com base em --days.
     end_date = datetime.today().strftime('%d-%m-%Y')
     start_date = (datetime.today() - timedelta(days=args.days)).strftime('%d-%m-%Y')
 
     concursos = scrape_concursos(start_date, end_date)
 
-    # From the list of public tenders and competitions found, obtain the ones that contain keywords like "abertura"
-    # that indicate the opening of a public tender or competition, and print their titles, dates, and URLs.
+    # Filtra concursos de abertura por palavras-chave.
     abertura_concursos = []
-    # use unaccented keyword matching to be robust to diacritics
+    # Usa normalização sem acentos para robustez com diacríticos.
     keywords = ["abertura", "inicio", "iniciado"]
 
-    def _normalize(text: str) -> str:
-        return "".join(
-            c for c in unicodedata.normalize("NFKD", text) if not unicodedata.combining(c)
-        ).lower()
-
     for concurso in concursos:
-        title_norm = _normalize(concurso.get('title', ''))
+        title_norm = normalize_text(concurso.get('title', ''))
         if any(keyword in title_norm for keyword in keywords):
             abertura_concursos.append(concurso)
     
     print(f"\n{'='*80}")
-    print(f"SCRAPING RESULTS: {start_date} to {end_date}")
+    print(f"RESULTADO DA COLETA: {start_date} ate {end_date}")
     print(f"{'='*80}")
-    print(f"Total concursos found: {len(concursos)}")
+    print(f"Total de concursos encontrados: {len(concursos)}")
     
     if concursos:
-        print(f"\nAll concursos:")
+        print(f"\nTodos os concursos:")
         for i, c in enumerate(concursos, 1):
             title = c.get('title', 'N/A')[:100]  # Truncate long titles
             print(f"  {i}. {title}")
     
     print(f"\n{'='*80}")
-    print(f"Total abertura concursos (keywords: {', '.join(keywords)}): {len(abertura_concursos)}")
+    print(f"Total de concursos de abertura (palavras-chave: {', '.join(keywords)}): {len(abertura_concursos)}")
     print(f"{'='*80}\n")
     
-    # If the abertura_concursos list is not empty, access the URL of each concurso in the abertura_concursos list 
-    # and print the first 500 characters of the page content to verify that the page is accessible and contains relevant information about the concurso.
-
     if abertura_concursos:
         result = process_abertura_concursos(abertura_concursos, args.export_pdf)
         if result["errors"]:
-            print(f"Completed with {result['errors']} error(s).")
+            print(f"Execucao concluida com {result['errors']} erro(s).")
     else:
-        print("No abertura concursos found in the specified date range.")
+        print("Nenhum concurso de abertura encontrado no intervalo informado.")

@@ -141,18 +141,17 @@ class TestExtractBasicMetadata(unittest.TestCase):
         self.assertIn("UNIVERSIDADE", result["orgao"].upper())
 
     def test_extract_edital_numero(self):
-        """Test extraction of edital number"""
-        text = "Edital nº 123/2026 de Abertura de Concurso Público"
+        """Test extraction of edital type/purpose from numbered edital text"""
+        text = "EDITAL EXTRAORDINÁRIO Nº 123/2026 de Abertura de Concurso Público"
         result = extract_basic_metadata(text)
         self.assertIsNotNone(result["edital_numero"])
+        self.assertIn("extraordin", result["edital_numero"].lower())
 
     def test_extract_edital_with_date(self):
-        """Test edital number extraction from date-based format"""
+        """Test date-based generic edital does not force a synthetic type"""
         text = "Edital de Abertura de 10 de fevereiro de 2026"
         result = extract_basic_metadata(text)
-        # Should extract the date as edital number
-        if result["edital_numero"]:
-            self.assertIn("fevereiro", result["edital_numero"].lower())
+        self.assertIsNone(result["edital_numero"])
 
     def test_extract_cargo_explicit(self):
         """Test cargo extraction from explicit label"""
