@@ -1,4 +1,5 @@
 import json
+import re
 import shutil
 from datetime import datetime, timedelta
 from math import ceil
@@ -30,6 +31,31 @@ def _parse_optional_int(value: Any) -> int | None:
             return int(float(raw.replace(".", "").replace(",", ".")))
         except ValueError:
             return None
+
+
+def _rebuild_legacy_url_title(url_title: str, edital_numero: str) -> str | None:
+    """Rebuild known legacy-truncated DOU slug using edital number when possible.
+
+    Example:
+    - url_title: 2025-de-23-de-fevereiro-de-2026-concurso-publico-688800849
+    - edital_numero: 1/2025
+    -> edital-n-1/2025-de-23-de-fevereiro-de-2026-concurso-publico-688800849
+    """
+    title = (url_title or "").strip()
+    edital = (edital_numero or "").strip().lower()
+    if not re.match(r"^\d{4}-de-.*-\d+$", title):
+        return None
+
+    m = re.match(r"^(\d+)\s*/\s*(\d{4})$", edital)
+    if not m:
+        return None
+
+    numero, ano = m.group(1), m.group(2)
+    # Only reconstruct when the slug starts with the same edital year.
+    if not title.startswith(f"{ano}-"):
+        return None
+
+    return f"edital-n-{numero}/{title}"
 
 
 def load_dashboard_config(config_path: Path) -> Dict[str, Any]:
@@ -107,13 +133,40 @@ def load_summaries(summaries_dir: Path) -> List[Dict[str, Any]]:
             financeiro = data.get("financeiro", {})
             review_meta = data.get("_review", {})
             source_meta = data.get("_source", {}) if isinstance(data.get("_source"), dict) else {}
+            document_id = _safe_text(source_meta.get("document_id"))
             
             # Get DOU URL for on-demand download (using configured pattern)
             url_title = _safe_text(source_meta.get("url_title"))
+            edital_numero = _safe_text(metadata.get("edital_numero"))
+            pdf_unavailable = False
+            url_error = None
+            
             if url_title:
-                from src.config.dou_urls import get_dou_config
-                dou_config = get_dou_config()
-                dou_url = dou_config.get_document_url(url_title)
+                # Check if marked as invalid
+                if url_title.startswith("__INVALID__"):
+                    pdf_unavailable = True
+                    url_error = _safe_text(source_meta.get("url_title_error", "PDF não disponível no DOU"))
+                    dou_url = None
+                # Check if matches invalid pattern (just year-number)
+                elif re.match(r'^\d{4}-\d+$', url_title):
+                    pdf_unavailable = True
+                    url_error = "URL incompleta ou inválida"
+                    dou_url = None
+                # Check legacy truncated pattern (starts with year slug and usually misses edital prefix)
+                elif re.match(r'^\d{4}-de-.*-\d+$', url_title):
+                    from src.config.dou_urls import get_dou_config
+                    dou_config = get_dou_config()
+                    rebuilt_url_title = _rebuild_legacy_url_title(url_title, edital_numero)
+                    if rebuilt_url_title:
+                        dou_url = dou_config.get_document_url(rebuilt_url_title)
+                    else:
+                        pdf_unavailable = True
+                        url_error = "URL legada incompleta (prefixo do edital ausente)"
+                        dou_url = None
+                else:
+                    from src.config.dou_urls import get_dou_config
+                    dou_config = get_dou_config()
+                    dou_url = dou_config.get_document_url(url_title)
             else:
                 dou_url = None
             
@@ -127,6 +180,9 @@ def load_summaries(summaries_dir: Path) -> List[Dict[str, Any]]:
                     "file_name": file_path.name,
                     "dou_url": dou_url,  # For on-demand download from DOU
                     "url_title": url_title,  # Real URL title from DOU
+                    "document_id": document_id,
+                    "pdf_unavailable": pdf_unavailable,  # Flag for invalid/missing URLs
+                    "url_error": url_error,  # Error message if PDF is unavailable
                     "title_for_categorization": title_for_categorization,  # Title or pdf_filename fallback
                     "orgao": _safe_text(metadata.get("orgao")),
                     "edital_numero": _safe_text(metadata.get("edital_numero")),
@@ -688,6 +744,6 @@ def apply_manual_review(
 
     return {
         "success": True,
-        "message": f"Revisao aplicada com {len(changes)} alteracao(oes).",
+        "message": f"Revisão aplicada com {len(changes)} alteração(ões).",
         "changed_fields": [item["field"] for item in changes],
     }

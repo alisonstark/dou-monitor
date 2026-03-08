@@ -1,0 +1,14 @@
+{
+  "summary_file": "dou-688800849.json",
+  "pdf_file": null,
+  "timestamp": "20260308T003315Z",
+  "reviewer": "Alison",
+  "source": "dashboard",
+  "changes": [
+    {
+      "field": "metadata.edital_numero",
+      "old": "Convocação para Provas Práticas",
+      "new": "Avaliação de Cota Racial"
+    }
+  ]
+}

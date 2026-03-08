@@ -1,12 +1,12 @@
 {
   "metadata": {
-    "orgao": "Publicado em: 23/02/2026 | Edição: 35 | Seção: 3 | Página: 182 Órgão: Entidades de Fiscalização do Exercício das Profissões Liberais/Conselho Regional de Nutrição da 5ª Região",
-    "edital_numero": null,
-    "cargo": "FISCAL DE NUTRIÇÃO -\nSALVADOR/BA e LILIANE DE JESUS DOS SANTOS, Nº Inscrição 0278000070, para o cargo ASSISTENTE\nTÉCNICO - SALVADOR/BA. A não apresentação e atendimento às exigências do edital caracterizará perda\nda vaga e a chamada do classificado subsequente.\nEm, 20 de fevereiro de 2026.\nIza Charla da Silva Macedo.\nPresidente do Conselho Regional de Nutrição da Bahia 5ª REGIÃO\nEste conteúdo não substitui o publicado na versão certificada.",
+    "orgao": "Conselho Regional de Nutrição",
+    "edital_numero": "Convocação",
+    "cargo": "Fiscal de Nutrição",
     "banca": {
-      "nome": null,
-      "tipo": null,
-      "confianca_extracao": 0.0
+      "nome": "",
+      "tipo": "manual",
+      "confianca_extracao": 1.0
     },
     "data_publicacao_dou": null
   },
@@ -17,22 +17,27 @@
     "ppiq": null
   },
   "financeiro": {
-    "taxa_inscricao": null,
+    "taxa_inscricao": "",
     "remuneracao_inicial": null
   },
   "cronograma": {
     "inscricao_inicio": null,
     "inscricao_fim": null,
     "isencao_inicio": null,
-    "data_prova": null
+    "data_prova": ""
   },
   "_source": {
     "pdf_filename": "2025-de-21-de-outubro-de-2025-concurso-publico-688390427.pdf",
     "document_id": "688390427",
     "canonical_summary": "dou-688390427.json",
     "migrated_at": "2026-03-06T22:17:14Z",
-    "url_title": "2025-de-21-de-outubro-de-2025-concurso-publico-688390427",
-    "url_title_resolved_at": "2026-03-07T10:45:45.114609",
-    "url_title_resolved_by": "cli_backfill_pdf_filename"
+    "url_title": "edital-n-cp-001/2025-de-21-de-outubro-de-2025-concurso-publico-688390427",
+    "url_title_resolved_at": "2026-03-07T21:15:00Z",
+    "url_title_resolved_by": "manual_correction_from_dou"
+  },
+  "_review": {
+    "last_reviewed": "20260308T002037Z",
+    "reviewer": "dashboard-user",
+    "source": "dashboard"
   }
 }

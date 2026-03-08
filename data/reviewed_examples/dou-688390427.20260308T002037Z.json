@@ -1,0 +1,14 @@
+{
+  "summary_file": "dou-688390427.json",
+  "pdf_file": null,
+  "timestamp": "20260308T002037Z",
+  "reviewer": "dashboard-user",
+  "source": "dashboard",
+  "changes": [
+    {
+      "field": "metadata.orgao",
+      "old": "Conselho Regional de Nutriçãov",
+      "new": "Conselho Regional de Nutrição"
+    }
+  ]
+}

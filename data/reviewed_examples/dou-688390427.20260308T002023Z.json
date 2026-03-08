@@ -1,0 +1,47 @@
+{
+  "summary_file": "dou-688390427.json",
+  "pdf_file": null,
+  "timestamp": "20260308T002023Z",
+  "reviewer": "Alison",
+  "source": "dashboard",
+  "changes": [
+    {
+      "field": "metadata.orgao",
+      "old": "Publicado em: 23/02/2026 | Edição: 35 | Seção: 3 | Página: 182 Órgão: Entidades de Fiscalização do Exercício das Profissões Liberais/Conselho Regional de Nutrição da 5ª Região",
+      "new": "Conselho Regional de Nutriçãov"
+    },
+    {
+      "field": "metadata.edital_numero",
+      "old": null,
+      "new": "Convocação"
+    },
+    {
+      "field": "metadata.cargo",
+      "old": "FISCAL DE NUTRIÇÃO -\nSALVADOR/BA e LILIANE DE JESUS DOS SANTOS, Nº Inscrição 0278000070, para o cargo ASSISTENTE\nTÉCNICO - SALVADOR/BA. A não apresentação e atendimento às exigências do edital caracterizará perda\nda vaga e a chamada do classificado subsequente.\nEm, 20 de fevereiro de 2026.\nIza Charla da Silva Macedo.\nPresidente do Conselho Regional de Nutrição da Bahia 5ª REGIÃO\nEste conteúdo não substitui o publicado na versão certificada.",
+      "new": "Fiscal de Nutrição"
+    },
+    {
+      "field": "metadata.banca",
+      "old": {
+        "nome": null,
+        "tipo": null,
+        "confianca_extracao": 0.0
+      },
+      "new": {
+        "nome": "",
+        "tipo": "manual",
+        "confianca_extracao": 1.0
+      }
+    },
+    {
+      "field": "financeiro.taxa_inscricao",
+      "old": null,
+      "new": ""
+    },
+    {
+      "field": "cronograma.data_prova",
+      "old": null,
+      "new": ""
+    }
+  ]
+}

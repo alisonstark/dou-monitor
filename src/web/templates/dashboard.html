@@ -99,7 +99,8 @@
     </section>
 
     {% if edit_record %}
-    <section class="panel review-panel">
+    <section class="panel review-panel" id="review-panel">
+      <a href="{{ cancel_edit_url }}" class="close-btn" title="Fechar seção de revisão">×</a>
       <h2>Revisão Manual (MIT) - Concursos Abertos</h2>
       <p class="hint">
         <small>Corrija campos inconsistentes e salve. O backend atualiza o JSON, cria backup e registra exemplo revisado para aprendizagem incremental.</small>
@@ -342,7 +343,11 @@
                 </td>
                 <td>
                   <div class="action-btns">
-                    <a href="/download-pdf/{{ rec.id }}" class="ghost-sm" target="_blank" rel="noopener" title="Baixar PDF do DOU (com fallback)">📥</a>
+                    {% if rec.pdf_unavailable %}
+                      <span class="ghost-sm disabled" title="{{ rec.url_error or 'PDF não disponível no DOU' }}" style="cursor: not-allowed; opacity: 0.5;">🚫</span>
+                    {% else %}
+                      <a href="/download-pdf/{{ rec.id }}" class="ghost-sm download-pdf-link" data-filename="{{ rec.id }}.pdf" data-dou-url="{{ rec.url }}" data-document-id="{{ rec.document_id }}" title="Baixar PDF do DOU (navegador pode perguntar onde salvar)">📥</a>
+                    {% endif %}
                     <a href="{{ url_with_updates(edit=rec.file_name) }}" class="ghost-sm" title="Editar (MIT)">✏️</a>
                   </div>
                 </td>
@@ -423,7 +428,11 @@
                 </td>
                 <td>
                   <div class="action-btns">
-                    <a href="/download-pdf/{{ rec.id }}" class="ghost-sm" target="_blank" rel="noopener" title="Baixar PDF do DOU (com fallback)">📥</a>
+                    {% if rec.pdf_unavailable %}
+                      <span class="ghost-sm disabled" title="{{ rec.url_error or 'PDF não disponível no DOU' }}" style="cursor: not-allowed; opacity: 0.5;">🚫</span>
+                    {% else %}
+                      <a href="/download-pdf/{{ rec.id }}" class="ghost-sm download-pdf-link" data-filename="{{ rec.id }}.pdf" data-dou-url="{{ rec.url }}" data-document-id="{{ rec.document_id }}" title="Baixar PDF do DOU (navegador pode perguntar onde salvar)">📥</a>
+                    {% endif %}
                     <a href="{{ url_with_updates(edit=rec.file_name) }}" class="ghost-sm" title="Editar (MIT)">✏️</a>
                   </div>
                 </td>
@@ -439,7 +448,97 @@
     </section>
   </main>
   
+  <!-- Toast Notification Container -->
+  <div id="toast-container"></div>
+
   <script>
+    // Toast notification system
+    function showToast(message, type = 'success', duration = 4000) {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = `toast toast-${type}`;
+      toast.textContent = message;
+      
+      container.appendChild(toast);
+      
+      // Trigger animation
+      setTimeout(() => toast.classList.add('show'), 10);
+      
+      // Auto-remove
+      setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+      }, duration);
+    }
+
+    // PDF Download handling with feedback and browser save dialog
+    document.addEventListener('click', function(e) {
+      const link = e.target.closest('.download-pdf-link');
+      if (!link) return;
+      
+      e.preventDefault(); // Prevent normal navigation
+      
+      const filename = link.dataset.filename || 'documento.pdf';
+      const downloadUrl = link.href;
+      const douUrl = link.dataset.douUrl;
+      const documentId = link.dataset.documentId;
+      const originalText = link.textContent;
+      
+      // Show downloading state
+      link.style.pointerEvents = 'none';
+      link.textContent = '⏳';
+      link.title = 'Gerando PDF...';
+      
+      // Fetch PDF and trigger browser download dialog
+      fetch(downloadUrl)
+        .then(response => {
+          if (!response.ok) throw new Error('Erro ao baixar');
+          return response.blob();
+        })
+        .then(blob => {
+          // Create blob URL and temporary download link
+          const blobUrl = URL.createObjectURL(blob);
+          const tempLink = document.createElement('a');
+          tempLink.href = blobUrl;
+          tempLink.download = filename; // This triggers browser's save dialog
+          tempLink.style.display = 'none';
+          
+          // Append, click, and clean up
+          document.body.appendChild(tempLink);
+          tempLink.click();
+          
+          // Cleanup
+          setTimeout(() => {
+            URL.revokeObjectURL(blobUrl);
+            document.body.removeChild(tempLink);
+            
+            // Reset button state
+            link.textContent = originalText;
+            link.style.pointerEvents = '';
+            link.title = 'Baixar PDF do DOU (navegador pode perguntar onde salvar)';
+            
+            // Show success toast
+            showToast(`✅ PDF baixado com sucesso: ${filename}`, 'success');
+          }, 500);
+        })
+        .catch(error => {
+          console.error('Download error:', error);
+          
+          // Reset button state
+          link.textContent = originalText;
+          link.style.pointerEvents = '';
+          link.title = 'Baixar PDF do DOU (navegador pode perguntar onde salvar)';
+          
+          // Fallback: prefer DOU search by document_id, then direct DOU URL, then endpoint URL.
+          const searchUrl = documentId
+            ? `https://www.in.gov.br/consulta/-/buscar/dou?q=${encodeURIComponent(documentId)}&s=do3&sortType=0`
+            : null;
+          const fallbackUrl = searchUrl || douUrl || downloadUrl;
+          window.open(fallbackUrl, '_blank', 'noopener');
+          showToast('⚠️ Download automático falhou. Abrimos a busca do DOU para baixar manualmente.', 'info', 7000);
+        });
+    });
+
     // Loading state for update button
     document.getElementById('btn-update-main')?.addEventListener('click', function(e) {
       const btn = e.currentTarget;

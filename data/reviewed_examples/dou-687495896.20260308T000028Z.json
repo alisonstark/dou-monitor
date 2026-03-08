@@ -1,0 +1,47 @@
+{
+  "summary_file": "dou-687495896.json",
+  "pdf_file": null,
+  "timestamp": "20260308T000028Z",
+  "reviewer": "Alison",
+  "source": "dashboard",
+  "changes": [
+    {
+      "field": "metadata.orgao",
+      "old": "Publicado em: 18/02/2026 | Edição: 32 | Seção: 3 | Página: 108 Órgão: Ministério da Saúde/Grupo Hospitalar Conceição",
+      "new": "Grupo Hospitalar Conceição"
+    },
+    {
+      "field": "metadata.edital_numero",
+      "old": "EXTRAORDIN",
+      "new": "Homologação do Resultado Final do Concurso Público"
+    },
+    {
+      "field": "metadata.cargo",
+      "old": "DE NÍVEL SUPERIOR\nO Grupo Hospitalar Conceição S.A, em conformidade com o Edital de Abertura nº 03/2025 e\nsuas alterações, torna público o presente edital do Concurso Público Nº 03/2025, conforme segue",
+      "new": "Educação Física"
+    },
+    {
+      "field": "metadata.banca",
+      "old": {
+        "nome": null,
+        "tipo": null,
+        "confianca_extracao": 0.0
+      },
+      "new": {
+        "nome": "",
+        "tipo": "manual",
+        "confianca_extracao": 1.0
+      }
+    },
+    {
+      "field": "financeiro.taxa_inscricao",
+      "old": null,
+      "new": ""
+    },
+    {
+      "field": "cronograma.data_prova",
+      "old": null,
+      "new": ""
+    }
+  ]
+}

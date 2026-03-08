@@ -1,0 +1,47 @@
+{
+  "summary_file": "dou-688926159.json",
+  "pdf_file": null,
+  "timestamp": "20260308T003436Z",
+  "reviewer": "Alison",
+  "source": "dashboard",
+  "changes": [
+    {
+      "field": "metadata.orgao",
+      "old": "Publicado em: 25/02/2026 | Edição: 37 | Seção: 3 | Página: 214 Órgão: Entidades de Fiscalização do Exercício das Profissões Liberais/Conselho Regional de Medicina do Estado do Paraná",
+      "new": "CONSELHO REGIONAL DE MEDICINA DO ESTADO DO PARANÁ"
+    },
+    {
+      "field": "metadata.edital_numero",
+      "old": "1/2025",
+      "new": "Convocação para Cargos"
+    },
+    {
+      "field": "metadata.cargo",
+      "old": "DE TI\nO CONSELHO REGIONAL DE MEDICINA DO ESTADO DO PARANÁ - CRM-PR, através do\nINSTITUTO DE EDUCAÇÃO E DESENVOLVIMENTO SOCIAL NOSSO RUMO, CONVOCA os candidatos\nhabilitados na Prova Objetiva para os cargos 205 - TÉCNICO EM TECNOLOGIA DA INFORMAÇÃO, 303 -\nANALISTA EM TECNOLOGIA DA INFORMAÇÃO, 308 - PROGRAMADOR EM TECNOLOGIA DA INFORMAÇÃO\nBACK-END e 309 - PROGRAMADOR EM TECNOLOGIA DA INFORMAÇÃO FRONT-END, em conformidade\ncom o Capítulo 11 do Edital de Abertura nº 01/2025, para a realização da Prova Prática no dia 01 de março\nde 2026, horário oficial de Brasília/DF. Os locais e horários poderão ser consultados via Internet, nos\nendereços eletrônicos www.nossorumo.org.br e www.crmpr.org.br.\nE, para que ninguém alegue desconhecimento, é publicado o presente Extrato do Edital de\nConvocação para as Provas Práticas.\nROMUALDO JOSÉ RIBEIRO GAMA\nPresidente do Conselho Regional de Medicina do Estado do Paraná - Crm-Pr\nEste conteúdo não substitui o publicado na versão certificada.",
+      "new": "T.I."
+    },
+    {
+      "field": "metadata.banca",
+      "old": {
+        "nome": "Instituto De Educação E Desenvolvimento Social Nosso Rumo",
+        "tipo": "fundacao",
+        "confianca_extracao": 0.75
+      },
+      "new": {
+        "nome": "Instituto De Educação E Desenvolvimento Social Nosso Rumo",
+        "tipo": "manual",
+        "confianca_extracao": 1.0
+      }
+    },
+    {
+      "field": "financeiro.taxa_inscricao",
+      "old": null,
+      "new": ""
+    },
+    {
+      "field": "cronograma.data_prova",
+      "old": null,
+      "new": ""
+    }
+  ]
+}

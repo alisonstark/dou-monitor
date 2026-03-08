@@ -22,3 +22,4 @@ editais/*.pdf
 tests/TEST_SUMMARY.md
 productization_plan.md
 saas_strategy_personal.md
+docs/aws_deployment_guide.md

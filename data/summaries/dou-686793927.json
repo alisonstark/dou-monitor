@@ -1,12 +1,12 @@
 {
   "metadata": {
-    "orgao": "Órgão: Ministério da Educação/Fundação Universidade Federal de São João Del Rei/Pró-Reitoria de Gestão e Desenvolvimento de Pessoas",
+    "orgao": "Fundação Universidade Federal de São João Del Rei",
     "edital_numero": "10 DE FEVEREIRO DE 2026",
     "cargo": "Professor",
     "banca": {
       "nome": "FCC",
-      "tipo": "externa",
-      "confianca_extracao": 0.98
+      "tipo": "manual",
+      "confianca_extracao": 1.0
     },
     "data_publicacao_dou": null
   },
@@ -34,5 +34,10 @@
     "url_title": "edital-de-abertura-de-10-de-fevereiro-de-2026-concurso-publico-para-provimento-de-cargos-de-professor-da-carreira-de-magisterio-superior-686793927",
     "url_title_resolved_at": "2026-03-07T10:45:45.112218",
     "url_title_resolved_by": "cli_backfill_pdf_filename"
+  },
+  "_review": {
+    "last_reviewed": "20260307T230323Z",
+    "reviewer": "Alison",
+    "source": "dashboard"
   }
 }

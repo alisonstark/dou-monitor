@@ -1,12 +1,12 @@
 {
   "metadata": {
-    "orgao": "Publicado em: 25/02/2026 | Edição: 37 | Seção: 3 | Página: 214 Órgão: Entidades de Fiscalização do Exercício das Profissões Liberais/Conselho Regional de Medicina do Estado do Paraná",
-    "edital_numero": "1/2025",
-    "cargo": "DE TI\nO CONSELHO REGIONAL DE MEDICINA DO ESTADO DO PARANÁ - CRM-PR, através do\nINSTITUTO DE EDUCAÇÃO E DESENVOLVIMENTO SOCIAL NOSSO RUMO, CONVOCA os candidatos\nhabilitados na Prova Objetiva para os cargos 205 - TÉCNICO EM TECNOLOGIA DA INFORMAÇÃO, 303 -\nANALISTA EM TECNOLOGIA DA INFORMAÇÃO, 308 - PROGRAMADOR EM TECNOLOGIA DA INFORMAÇÃO\nBACK-END e 309 - PROGRAMADOR EM TECNOLOGIA DA INFORMAÇÃO FRONT-END, em conformidade\ncom o Capítulo 11 do Edital de Abertura nº 01/2025, para a realização da Prova Prática no dia 01 de março\nde 2026, horário oficial de Brasília/DF. Os locais e horários poderão ser consultados via Internet, nos\nendereços eletrônicos www.nossorumo.org.br e www.crmpr.org.br.\nE, para que ninguém alegue desconhecimento, é publicado o presente Extrato do Edital de\nConvocação para as Provas Práticas.\nROMUALDO JOSÉ RIBEIRO GAMA\nPresidente do Conselho Regional de Medicina do Estado do Paraná - Crm-Pr\nEste conteúdo não substitui o publicado na versão certificada.",
+    "orgao": "CONSELHO REGIONAL DE MEDICINA DO ESTADO DO PARANÁ",
+    "edital_numero": "Convocação para Cargos",
+    "cargo": "T.I.",
     "banca": {
       "nome": "Instituto De Educação E Desenvolvimento Social Nosso Rumo",
-      "tipo": "fundacao",
-      "confianca_extracao": 0.75
+      "tipo": "manual",
+      "confianca_extracao": 1.0
     },
     "data_publicacao_dou": null
   },
@@ -17,22 +17,27 @@
     "ppiq": null
   },
   "financeiro": {
-    "taxa_inscricao": null,
+    "taxa_inscricao": "",
     "remuneracao_inicial": null
   },
   "cronograma": {
     "inscricao_inicio": null,
     "inscricao_fim": null,
     "isencao_inicio": null,
-    "data_prova": null
+    "data_prova": ""
   },
   "_source": {
     "pdf_filename": "2025-de-23-de-marco-de-2026-concurso-publico-688926159.pdf",
     "document_id": "688926159",
     "canonical_summary": "dou-688926159.json",
     "migrated_at": "2026-03-06T22:17:14Z",
-    "url_title": "2025-de-23-de-marco-de-2026-concurso-publico-688926159",
-    "url_title_resolved_at": "2026-03-07T10:45:45.116722",
-    "url_title_resolved_by": "cli_backfill_pdf_filename"
+    "url_title": "edital-n-1/2025-de-23-de-marco-de-2026-concurso-publico-688926159",
+    "url_title_resolved_at": "2026-03-07T21:25:00Z",
+    "url_title_resolved_by": "manual_correction_from_dou"
+  },
+  "_review": {
+    "last_reviewed": "20260308T003436Z",
+    "reviewer": "Alison",
+    "source": "dashboard"
   }
 }

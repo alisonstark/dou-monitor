@@ -1,12 +1,12 @@
 {
   "metadata": {
-    "orgao": "Publicado em: 18/02/2026 | Edição: 32 | Seção: 3 | Página: 108 Órgão: Ministério da Saúde/Grupo Hospitalar Conceição",
-    "edital_numero": "EXTRAORDIN",
-    "cargo": "DE NÍVEL SUPERIOR\nO Grupo Hospitalar Conceição S.A, em conformidade com o Edital de Abertura nº 03/2025 e\nsuas alterações, torna público o presente edital do Concurso Público Nº 03/2025, conforme segue",
+    "orgao": "Grupo Hospitalar Conceição",
+    "edital_numero": "Homologação do Resultado Final do Concurso Público",
+    "cargo": "Educação Física",
     "banca": {
-      "nome": null,
-      "tipo": null,
-      "confianca_extracao": 0.0
+      "nome": "",
+      "tipo": "manual",
+      "confianca_extracao": 1.0
     },
     "data_publicacao_dou": null
   },
@@ -17,22 +17,27 @@
     "ppiq": null
   },
   "financeiro": {
-    "taxa_inscricao": null,
+    "taxa_inscricao": "",
     "remuneracao_inicial": null
   },
   "cronograma": {
     "inscricao_inicio": null,
     "inscricao_fim": null,
     "isencao_inicio": null,
-    "data_prova": null
+    "data_prova": ""
   },
   "_source": {
     "pdf_filename": "2025-687495896.pdf",
     "document_id": "687495896",
     "canonical_summary": "dou-687495896.json",
     "migrated_at": "2026-03-06T22:17:14Z",
-    "url_title": "2025-687495896",
-    "url_title_resolved_at": "2026-03-07T10:45:45.113199",
-    "url_title_resolved_by": "cli_backfill_pdf_filename"
+    "url_title": "edital-extraordinario-n-1/2026-concurso-publico-n-03/2025-687495896",
+    "url_title_resolved_at": "2026-03-07T13:45:00Z",
+    "url_title_resolved_by": "manual_correction_from_dou"
+  },
+  "_review": {
+    "last_reviewed": "20260308T000028Z",
+    "reviewer": "Alison",
+    "source": "dashboard"
   }
 }

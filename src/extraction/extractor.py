@@ -121,6 +121,96 @@ def _parse_date(text: str) -> Optional[str]:
     return None
 
 
+def _title_case_pt(text: str) -> str:
+    """Convert text to Title Case in Portuguese, respecting prepositions.
+    
+    Examples:
+        "HOMOLOGAÇÃO DO RESULTADO FINAL" → "Homologação do Resultado Final"
+        "EXTRAORDINÁRIO" → "Extraordinário"
+        "CONCURSO PÚBLICO" → "Concurso Público"
+    """
+    if not text:
+        return ""
+    
+    # Preposições, conjunções e artigos que ficam em minúsculas (exceto primeira palavra)
+    lowercase_words = {'do', 'da', 'dos', 'das', 'de', 'e', 'ou', 'a', 'o', 'um', 'uma', 'por', 'para', 'em', 'no', 'na', 'nos', 'nas'}
+    
+    words = text.lower().split()
+    result = []
+    
+    for i, word in enumerate(words):
+        if i == 0:  # Sempre capitalizar primeira palavra
+            result.append(word.capitalize())
+        elif word in lowercase_words:
+            result.append(word)
+        else:
+            result.append(word.capitalize())
+    
+    return ' '.join(result)
+
+
+def _extract_edital_type(text: str) -> Optional[str]:
+    """Extract the type/purpose of edital (e.g., 'Extraordinário', 'Homologação do Resultado Final').
+    
+    Patterns:
+        "EDITAL EXTRAORDINÁRIO Nº 1/2026" → "Extraordinário"
+        "RETIFICAÇÃO DO EDITAL Nº 25/2025" → "Retificação"
+        "EDITAL DE ABERTURA" → None (generic, not useful)
+        "HOMOLOGAÇÃO DO RESULTADO FINAL" → "Homologação do Resultado Final"
+    
+    Returns the formatted type in Title Case, or None if generic/not found.
+    """
+    if not text:
+        return None
+    
+    # Strategy 1: Look for specific keywords that identify edital type (highest priority)
+    # These pattern keywords that indicate the type
+    keyword_patterns = [
+        r"RETIFICAÇÃO",
+        r"HOMOLOGAÇÃO",
+        r"RESULTADO\s+FINAL",
+        r"EXTRAORDINÁRIO",
+        r"PRORROGAÇÃO",
+        r"CONVOCAÇÃO",
+        r"CANCELAMENTO",
+        r"SUSPENSÃO",
+        r"ALTERAÇÃO",
+    ]
+    
+    for keyword_pattern in keyword_patterns:
+        match = re.search(keyword_pattern, text, re.IGNORECASE)
+        if match:
+            found_keyword = match.group(0).strip()
+            
+            # For HOMOLOGAÇÃO, check if it's followed by "DO RESULTADO FINAL"
+            if found_keyword.upper() == "HOMOLOGAÇÃO":
+                next_part = text[match.end():match.end() + 100]
+                result_match = re.match(r"\s+DO\s+RESULTADO\s+FINAL", next_part, re.IGNORECASE)
+                if result_match:
+                    return "Homologação do Resultado Final"
+                else:
+                    return "Homologação"
+            else:
+                # For other keywords, just return the keyword with Title Case
+                return _title_case_pt(found_keyword.lower())
+    
+    # Strategy 2: Look for pattern "EDITAL [type] Nº"
+    # Match: EDITAL EXTRAORDINÁRIO Nº 1/2026
+    generic_types = {'de abertura', 'de abertura de', 'de seleção', 'para bolsistas', 'nº', ''}
+    
+    match = re.search(
+        r"EDITAL\s+(?:DE\s+ABERTURA\s+)?([A-ZÀ-Ú][A-ZÀ-Ú\s\-/]*?)\s*(?:N[ºo]\.?|$)",
+        text,
+        re.IGNORECASE
+    )
+    if match:
+        edital_type = match.group(1).strip()
+        if edital_type.lower() not in generic_types:
+            return _title_case_pt(edital_type.lower())
+    
+    return None
+
+
 def extract_basic_metadata(text: str) -> Dict[str, Any]:
     lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
 
@@ -150,28 +240,10 @@ def extract_basic_metadata(text: str) -> Dict[str, Any]:
 
     metadata["orgao"] = orgao_val
 
-    # Try to capture edital number or date-based identifier
-    edital_num = None
-    edital_match = re.search(
-        r"Edital(?: de Abertura)?(?: n(?:º|o|r)\.?\s*)?[:\-\s]*([0-9A-Za-z\-/\.]+)",
-        text,
-        re.I,
-    )
-    if edital_match:
-        candidate = edital_match.group(1).strip()
-        if len(candidate) > 2 and not re.fullmatch(r"DE|DE\b", candidate, re.I):
-            edital_num = candidate
-
-    if not edital_num:
-        em = re.search(
-            r"Edital de Abertura de\s*([0-9]{1,2}\s+de\s+\w+\s+de\s+[0-9]{4})",
-            text,
-            re.I,
-        )
-        if em:
-            edital_num = em.group(1).strip()
-
-    metadata["edital_numero"] = edital_num
+    # Extract edital type/purpose instead of just number
+    # Examples: "Extraordinário", "Homologação do Resultado Final", "Retificação"
+    edital_tipo = _extract_edital_type(text)
+    metadata["edital_numero"] = edital_tipo  # Store type in edital_numero for backward compatibility
 
     # cargo: look for explicit 'cargo' label or common wording
     cargo_val = None

@@ -56,6 +56,10 @@ def create_app(summaries_dir: Path | None = None, config_path: Path | None = Non
     # 🔒 SECURITY FIX: Use environment variable for SECRET_KEY
     app.config["SECRET_KEY"] = os.environ.get("FLASK_SECRET_KEY") or secrets.token_urlsafe(32)
     
+    # ⏰ SESSION: Configure session timeout (default: 30 minutes of inactivity)
+    session_timeout_minutes = int(os.environ.get("SESSION_TIMEOUT_MINUTES", 30))
+    app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(minutes=session_timeout_minutes)
+    
     # 🔒 SECURITY: Initialize CSRF protection
     csrf = CSRFProtect(app)
     
@@ -241,7 +245,11 @@ def create_app(summaries_dir: Path | None = None, config_path: Path | None = Non
             if verify_credentials(username, password):
                 user = User(username)
                 login_user(user, remember=False)
+                
+                # Mark session as permanent to use PERMANENT_SESSION_LIFETIME (30min default)
+                session.permanent = True
                 session["session_boot_id"] = app.config.get("SERVER_BOOT_ID")
+                
                 app.logger.info(f"Login successful: user={username} ip={request.remote_addr}")
                 _clear_failures(ip)
                 _clear_captcha_challenge()
@@ -623,22 +631,59 @@ def create_app(summaries_dir: Path | None = None, config_path: Path | None = Non
         if review_result["success"]:
             changed = review_result.get("changed_fields", [])
             if changed:
-                fields_str = ", ".join([f.split(".")[-1] for f in changed])
+                # Mapeamento de nomes de campos para português
+                field_names = {
+                    "orgao": "órgão",
+                    "edital_numero": "edital",
+                    "cargo": "cargo",
+                    "banca": "banca",
+                    "vagas_total": "vagas",
+                    "taxa_inscricao": "taxa",
+                    "data_prova": "data da prova"
+                }
+                fields_list = [field_names.get(f.split(".")[-1], f.split(".")[-1]) for f in changed]
+                fields_str = ", ".join(fields_list)
                 flash(f"✅ MIT aplicado: {review_result['message']} Campos alterados: {fields_str}", "success")
             else:
                 flash(f"ℹ️ {review_result['message']}", "success")
         else:
             flash(f"❌ Erro ao aplicar MIT: {review_result['message']}", "error")
 
+        # Remove edit_id from query string after successful save
         if next_query:
+            from urllib.parse import parse_qs, urlencode
             safe_query = next_query.lstrip("?")
-            return redirect(url_for("index") + f"?{safe_query}")
+            params = parse_qs(safe_query)
+            params.pop('edit_id', None)  # Remove edit_id to close review panel
+            if params:
+                clean_query = urlencode(params, doseq=True)
+                return redirect(url_for("index") + f"?{clean_query}")
         return redirect(url_for("index"))
 
     @app.get("/download-pdf/<summary_id>")
     @login_required
     def download_pdf_from_dou(summary_id):
         """Download PDF from DOU on-demand and serve it (streaming, no cache)"""
+        def rebuild_legacy_url_title(url_title: str, edital_numero: str) -> str | None:
+            """Try to rebuild known legacy-truncated slug using edital number.
+
+            Example: 2025-de-23-de-fevereiro-... + 1/2025 -> edital-n-1/2025-de-23-de-fevereiro-...
+            """
+            title = (url_title or "").strip()
+            edital = (edital_numero or "").strip().lower()
+            if not re.match(r"^\d{4}-de-.*-\d+$", title):
+                return None
+
+            m = re.match(r"^(\d+)\s*/\s*(\d{4})$", edital)
+            if not m:
+                return None
+
+            numero, ano = m.group(1), m.group(2)
+            if not title.startswith(f"{ano}-"):
+                return None
+
+            return f"edital-n-{numero}/{title}"
+
         # Validate summary_id format (should be like dou-123456789)
         if not re.match(r'^dou-\d+$', summary_id):
             abort(400, "Invalid summary ID format")
@@ -654,6 +699,7 @@ def create_app(summaries_dir: Path | None = None, config_path: Path | None = Non
                 data = json.load(f)
             
             source_meta = data.get("_source", {})
+            metadata = data.get("metadata", {}) if isinstance(data.get("metadata"), dict) else {}
 
             # Use configured DOU URL pattern
             from src.config.dou_urls import get_dou_config
@@ -661,16 +707,39 @@ def create_app(summaries_dir: Path | None = None, config_path: Path | None = Non
 
             # Candidate titles for legacy/migrated files that may not have _source.url_title.
             url_title = (source_meta.get("url_title") or "").strip()
+            
+            # Check if url_title is marked as invalid
+            if url_title.startswith("__INVALID__"):
+                error_msg = source_meta.get("url_title_error", "URL não disponível no DOU")
+                app.logger.warning(f"PDF download attempted for invalid URL: {summary_id}")
+                abort(404, f"Este documento não está mais disponível no DOU. {error_msg}")
+            
+            # Validate url_title pattern (should not be just numbers like "2025-687495896")
+            if url_title and re.match(r'^\d{4}-\d+$', url_title):
+                app.logger.warning(f"PDF download attempted with invalid url_title pattern: {url_title}")
+                abort(404, f"URL inválida detectada. Este documento pode ter sido removido do DOU ou ter metadados incompletos.")
+            
             pdf_filename = (source_meta.get("pdf_filename") or "").strip()
             canonical_summary = (source_meta.get("canonical_summary") or "").strip()
             document_id = str(source_meta.get("document_id") or "").strip()
             resolved_title_by_document_id = ""
 
             candidate_titles = []
+            rebuilt_from_legacy = ""
             if url_title:
+                rebuilt = rebuild_legacy_url_title(url_title, str(metadata.get("edital_numero") or ""))
+                if rebuilt:
+                    rebuilt_from_legacy = rebuilt
+                    candidate_titles.append(rebuilt)
                 candidate_titles.append(url_title)
             if pdf_filename:
-                candidate_titles.append(Path(pdf_filename).stem)
+                # Skip pdf_filename if it matches invalid pattern
+                stem = Path(pdf_filename).stem
+                if not re.match(r'^\d{4}-\d+$', stem):
+                    rebuilt_stem = rebuild_legacy_url_title(stem, str(metadata.get("edital_numero") or ""))
+                    if rebuilt_stem:
+                        candidate_titles.append(rebuilt_stem)
+                    candidate_titles.append(stem)
             if canonical_summary:
                 candidate_titles.append(Path(canonical_summary).stem)
 
@@ -760,6 +829,27 @@ def create_app(summaries_dir: Path | None = None, config_path: Path | None = Non
                     app.logger.warning(
                         f"Could not persist resolved url_title for {summary_id}: {persist_error}"
                     )
+
+            # Persist reconstructed legacy url_title when it works.
+            if (
+                url_title
+                and rebuilt_from_legacy
+                and chosen_title == rebuilt_from_legacy
+                and chosen_title != url_title
+            ):
+                try:
+                    source_meta["url_title"] = chosen_title
+                    source_meta["url_title_resolved_at"] = datetime.now().isoformat()
+                    source_meta["url_title_resolved_by"] = "legacy_prefix_reconstruction"
+                    with summary_path.open("w", encoding="utf-8") as f:
+                        json.dump(data, f, ensure_ascii=False, indent=2)
+                    app.logger.info(
+                        f"Persisted reconstructed url_title for {summary_id}: {chosen_title}"
+                    )
+                except Exception as persist_error:
+                    app.logger.warning(
+                        f"Could not persist reconstructed url_title for {summary_id}: {persist_error}"
+                    )
             
             # Serve the temporary file
             app.logger.info(
@@ -817,4 +907,13 @@ def create_app(summaries_dir: Path | None = None, config_path: Path | None = Non
 
 if __name__ == "__main__":
     app = create_app()
-    app.run(host="127.0.0.1", port=5000, debug=True)
+    
+    # Development mode only - Production should use Gunicorn/WSGI
+    debug_mode = os.environ.get("DEBUG", "True").lower() == "true"
+    host = os.environ.get("HOST", "127.0.0.1")
+    port = int(os.environ.get("PORT", 5000))
+    
+    if debug_mode:
+        app.logger.warning("[WARNING] Running in DEBUG mode - DO NOT use in production!")
+    
+    app.run(host=host, port=port, debug=debug_mode)

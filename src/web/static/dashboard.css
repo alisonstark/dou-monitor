@@ -316,6 +316,33 @@ button.primary:hover {
 .review-panel {
   border: 2px dashed #c8b88e;
   background: linear-gradient(180deg, #fffdf8 0%, #fff7e8 100%);
+  position: relative;
+}
+
+.review-panel .close-btn {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: rgba(169, 72, 44, 0.1);
+  border: 1px solid rgba(169, 72, 44, 0.3);
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 1.2rem;
+  color: var(--warn);
+  transition: all 0.2s;
+  text-decoration: none;
+  line-height: 1;
+}
+
+.review-panel .close-btn:hover {
+  background: rgba(169, 72, 44, 0.2);
+  border-color: var(--warn);
+  transform: scale(1.1);
 }
 
 .quick-filters {
@@ -461,4 +488,55 @@ button.primary:hover {
   .quick-filter-btn {
     text-align: center;
   }
+}
+
+/* ===================================
+   Toast Notifications
+   =================================== */
+#toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.toast {
+  min-width: 280px;
+  max-width: 400px;
+  padding: 1rem 1.2rem;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  opacity: 0;
+  transform: translateX(400px);
+  transition: all 0.3s ease-out;
+  pointer-events: auto;
+}
+
+.toast.show {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.toast-success {
+  background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+  color: #155724;
+  border-left: 4px solid #28a745;
+}
+
+.toast-error {
+  background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+  color: #721c24;
+  border-left: 4px solid #dc3545;
+}
+
+.toast-info {
+  background: linear-gradient(135deg, #d1ecf1 0%, #bee5eb 100%);
+  color: #0c5460;
+  border-left: 4px solid #17a2b8;
 }

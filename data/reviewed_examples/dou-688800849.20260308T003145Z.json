@@ -1,0 +1,24 @@
+{
+  "summary_file": "dou-688800849.json",
+  "pdf_file": null,
+  "timestamp": "20260308T003145Z",
+  "reviewer": "Alison",
+  "source": "dashboard",
+  "changes": [
+    {
+      "field": "metadata.orgao",
+      "old": "Publicado em: 25/02/2026 | Edição: 37 | Seção: 3 | Página: 214 Órgão: Entidades de Fiscalização do Exercício das Profissões Liberais/Conselho Regional de Medicina do Estado do Paraná",
+      "new": "CONSELHO REGIONAL DE MEDICINA DO ESTADO DO PARANÁ"
+    },
+    {
+      "field": "metadata.edital_numero",
+      "old": "1/2025",
+      "new": "Convocação para Provas Práticas"
+    },
+    {
+      "field": "metadata.cargo",
+      "old": "",
+      "new": "T.I."
+    }
+  ]
+}

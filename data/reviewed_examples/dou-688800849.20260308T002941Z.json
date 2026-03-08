@@ -1,0 +1,37 @@
+{
+  "summary_file": "dou-688800849.json",
+  "pdf_file": null,
+  "timestamp": "20260308T002941Z",
+  "reviewer": "dashboard-user",
+  "source": "dashboard",
+  "changes": [
+    {
+      "field": "metadata.cargo",
+      "old": null,
+      "new": ""
+    },
+    {
+      "field": "metadata.banca",
+      "old": {
+        "nome": "Instituto De Educação E Desenvolvimento Social Nosso Rumo",
+        "tipo": "fundacao",
+        "confianca_extracao": 0.75
+      },
+      "new": {
+        "nome": "Instituto De Educação E Desenvolvimento Social Nosso Rumo",
+        "tipo": "manual",
+        "confianca_extracao": 1.0
+      }
+    },
+    {
+      "field": "financeiro.taxa_inscricao",
+      "old": null,
+      "new": ""
+    },
+    {
+      "field": "cronograma.data_prova",
+      "old": null,
+      "new": ""
+    }
+  ]
+}

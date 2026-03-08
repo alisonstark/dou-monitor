@@ -1,5 +1,6 @@
 import argparse
 import json
+import re
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -78,10 +79,41 @@ def parse_args():
 
 
 def backfill_url_titles_in_summaries(summaries_dir: Path, dry_run: bool = False, limit: int = 0) -> dict:
-    """Resolve and persist missing _source.url_title for legacy summaries."""
+    """Resolve and persist missing/legacy _source.url_title for summaries."""
+
+    def _is_invalid_year_number_slug(value: str) -> bool:
+        return bool(re.match(r"^\d{4}-\d+$", value))
+
+    def _is_legacy_truncated_slug(value: str) -> bool:
+        return bool(re.match(r"^\d{4}-de-.*-\d+$", value))
+
+    def _rebuild_legacy_slug(candidate_slug: str, edital_numero: str) -> str | None:
+        """Rebuild slug prefix for legacy cases, e.g. 1/2025 + 2025-de-... -> edital-n-1/2025-de-..."""
+        slug = (candidate_slug or "").strip()
+        edital = (edital_numero or "").strip().lower()
+        if not _is_legacy_truncated_slug(slug):
+            return None
+
+        m = re.match(r"^(\d+)\s*/\s*(\d{4})$", edital)
+        if not m:
+            return None
+
+        numero, ano = m.group(1), m.group(2)
+        if not slug.startswith(f"{ano}-"):
+            return None
+        return f"edital-n-{numero}/{slug}"
+
+    def _resolve_by_document_id_any_section(document_id: str) -> str | None:
+        for do_type in ("do1", "do2", "do3"):
+            resolved = resolve_url_title_by_document_id(document_id, do_type=do_type)
+            if resolved:
+                return resolved
+        return None
+
     stats = {
         "scanned": 0,
         "missing": 0,
+        "legacy_truncated": 0,
         "resolved": 0,
         "updated": 0,
         "skipped_no_document_id": 0,
@@ -106,31 +138,68 @@ def backfill_url_titles_in_summaries(summaries_dir: Path, dry_run: bool = False,
             if not isinstance(source_meta, dict):
                 continue
 
-            url_title = (source_meta.get("url_title") or "").strip()
-            if url_title:
-                continue
+            metadata = data.get("metadata") if isinstance(data.get("metadata"), dict) else {}
 
-            stats["missing"] += 1
+            url_title = (source_meta.get("url_title") or "").strip()
+            needs_repair = False
+            if not url_title:
+                stats["missing"] += 1
+                needs_repair = True
+            elif _is_legacy_truncated_slug(url_title) or _is_invalid_year_number_slug(url_title):
+                stats["legacy_truncated"] += 1
+                needs_repair = True
+
+            if not needs_repair:
+                continue
             
-            # Strategy 1: Extract url_title from legacy pdf_filename (remove .pdf extension)
+            # Strategy 0: Rebuild prefix for known legacy-truncated current url_title.
+            resolved_title = None
+            resolution_method = None
+            edital_numero = str(metadata.get("edital_numero") or "").strip()
+
+            if url_title and _is_legacy_truncated_slug(url_title):
+                rebuilt = _rebuild_legacy_slug(url_title, edital_numero)
+                if rebuilt:
+                    resolved_title = rebuilt
+                    resolution_method = "cli_backfill_legacy_prefix"
+                    print(f"HIT  {file_path.name}: reconstruído de url_title legado -> {resolved_title}")
+
+            # Strategy 1: Extract url_title from legacy pdf_filename (remove .pdf extension).
             pdf_filename = (source_meta.get("pdf_filename") or "").strip()
-            if pdf_filename and pdf_filename.endswith(".pdf"):
-                resolved_title = pdf_filename[:-4]  # Remove .pdf
-                resolution_method = "cli_backfill_pdf_filename"
-                print(f"HIT  {file_path.name}: extraído de pdf_filename -> {resolved_title}")
-            else:
-                # Strategy 2: Query DOU search API by document_id
+            if not resolved_title and pdf_filename and pdf_filename.endswith(".pdf"):
+                candidate_title = pdf_filename[:-4]  # Remove .pdf
+                rebuilt_candidate = _rebuild_legacy_slug(candidate_title, edital_numero)
+                if rebuilt_candidate:
+                    resolved_title = rebuilt_candidate
+                    resolution_method = "cli_backfill_legacy_prefix_pdf_filename"
+                    print(f"HIT  {file_path.name}: reconstruído de pdf_filename legado -> {resolved_title}")
+                elif _is_invalid_year_number_slug(candidate_title) or _is_legacy_truncated_slug(candidate_title):
+                    print(f"SKIP {file_path.name}: pdf_filename inválido para uso direto -> {candidate_title}")
+                else:
+                    resolved_title = candidate_title
+                    resolution_method = "cli_backfill_pdf_filename"
+                    print(f"HIT  {file_path.name}: extraído de pdf_filename -> {resolved_title}")
+            
+            # Strategy 2: Query DOU search API by document_id (if Strategy 1 failed or was invalid)
+            if not resolved_title:
                 document_id = str(source_meta.get("document_id") or "").strip()
                 if not document_id:
                     stats["skipped_no_document_id"] += 1
-                    print(f"SKIP {file_path.name}: sem document_id ou pdf_filename")
+                    print(f"SKIP {file_path.name}: sem document_id válido")
                     continue
 
-                resolved_title = resolve_url_title_by_document_id(document_id)
+                resolved_title = _resolve_by_document_id_any_section(document_id)
                 resolution_method = "cli_backfill_document_id"
                 
                 if not resolved_title:
-                    print(f"MISS {file_path.name}: document_id={document_id} sem correspondência")
+                    print(f"MISS {file_path.name}: document_id={document_id} sem correspondência no DOU")
+                    # Mark as invalid to avoid future download attempts
+                    if not dry_run:
+                        source_meta["url_title"] = f"__INVALID__{document_id}"
+                        source_meta["url_title_error"] = "Document not found in DOU search API"
+                        source_meta["url_title_resolved_at"] = datetime.now().isoformat()
+                        with file_path.open("w", encoding="utf-8") as f:
+                            json.dump(data, f, ensure_ascii=False, indent=2)
                     continue
                     
                 print(f"HIT  {file_path.name}: document_id={document_id} -> {resolved_title}")
@@ -236,7 +305,8 @@ if __name__ == "__main__":
         print("-" * 80)
         print(f"Scanned: {stats['scanned']}")
         print(f"Missing url_title: {stats['missing']}")
-        print(f"Resolved by document_id: {stats['resolved']}")
+        print(f"Legacy truncated detected: {stats['legacy_truncated']}")
+        print(f"Resolved (all strategies): {stats['resolved']}")
         print(f"Updated files: {stats['updated']}")
         print(f"Skipped (no document_id): {stats['skipped_no_document_id']}")
         print(f"Errors: {stats['errors']}")

@@ -1,0 +1,27 @@
+{
+  "summary_file": "dou-686793927.json",
+  "pdf_file": null,
+  "timestamp": "20260307T230323Z",
+  "reviewer": "Alison",
+  "source": "dashboard",
+  "changes": [
+    {
+      "field": "metadata.orgao",
+      "old": "Órgão: Ministério da Educação/Fundação Universidade Federal de São João Del Rei/Pró-Reitoria de Gestão e Desenvolvimento de Pessoas",
+      "new": "Fundação Universidade Federal de São João Del Rei"
+    },
+    {
+      "field": "metadata.banca",
+      "old": {
+        "nome": "FCC",
+        "tipo": "externa",
+        "confianca_extracao": 0.98
+      },
+      "new": {
+        "nome": "FCC",
+        "tipo": "manual",
+        "confianca_extracao": 1.0
+      }
+    }
+  ]
+}
